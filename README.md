@@ -78,6 +78,52 @@ Run tests:
 npm run test:e2e
 ```
 
+### Docker Local Development (WSL)
+
+This setup is for local development (non-production) with Postgres + API in containers.
+
+Use a user WSL distro terminal (recommended: Ubuntu with Docker Desktop WSL integration enabled), then run commands from the project directory.
+
+1. Start stack:
+
+```bash
+docker compose up -d --build
+```
+
+1. Run migrations in API container:
+
+```bash
+docker compose exec api npm run migration:run
+```
+
+1. Check logs:
+
+```bash
+docker compose logs -f api db
+```
+
+1. Stop stack:
+
+```bash
+docker compose down
+```
+
+NPM shortcuts are also available:
+
+```bash
+npm run docker:up
+npm run docker:migrate
+npm run docker:logs
+npm run docker:down
+```
+
+Default compose values:
+
+- API: `http://localhost:3000`
+- DB host for API container: `db`
+- DB URL: `postgres://postgres:postgres@db:5432/radar_puls`
+- Persistent DB volume: `postgres_data`
+
 ### Endpoints
 
 - `GET /health`
