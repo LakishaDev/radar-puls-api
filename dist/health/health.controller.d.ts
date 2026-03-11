@@ -1,9 +1,0 @@
-import { DataSource } from 'typeorm';
-export declare class HealthController {
-    private readonly dataSource;
-    constructor(dataSource: DataSource);
-    getHealth(): Promise<{
-        status: string;
-        db: string;
-    }>;
-}
