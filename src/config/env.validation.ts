@@ -1,0 +1,50 @@
+import { plainToInstance } from "class-transformer";
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  validateSync,
+} from "class-validator";
+
+class EnvironmentVariables {
+  @IsInt()
+  @Min(1)
+  PORT!: number;
+
+  @IsString()
+  DATABASE_URL!: string;
+
+  @IsString()
+  DEVICE_TOKENS_JSON!: string;
+
+  @IsOptional()
+  @IsString()
+  NODE_ENV?: string;
+}
+
+export function validateEnv(
+  config: Record<string, unknown>,
+): EnvironmentVariables {
+  const validatedConfig = plainToInstance(EnvironmentVariables, config, {
+    enableImplicitConversion: true,
+  });
+
+  const errors = validateSync(validatedConfig, {
+    skipMissingProperties: false,
+  });
+
+  if (errors.length > 0) {
+    throw new Error(errors.toString());
+  }
+
+  try {
+    JSON.parse(validatedConfig.DEVICE_TOKENS_JSON);
+  } catch {
+    throw new Error(
+      'DEVICE_TOKENS_JSON must be a valid JSON object map: {"device_id":"token"}',
+    );
+  }
+
+  return validatedConfig;
+}
