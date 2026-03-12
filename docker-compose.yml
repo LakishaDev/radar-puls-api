@@ -43,6 +43,9 @@ services:
       WORKER_MAX_RETRIES: 3
       ENABLE_DEV_PROCESSING_TRIGGER: "true"
       PROCESSING_DEV_TRIGGER_TOKEN: "dev-processing-trigger-token"
+      PARSER_VERSION: "v1.0"
+      ENABLE_BACKFILL: "false"
+      BACKFILL_TRIGGER_TOKEN: "dev-backfill-trigger-token"
       TS_NODE_DEV: "true"
       TS_NODE_DEV_POLL: "true"
     ports:
@@ -72,6 +75,9 @@ services:
       WORKER_INSTANCE_ID: "worker-1"
       ENABLE_DEV_PROCESSING_TRIGGER: "true"
       PROCESSING_DEV_TRIGGER_TOKEN: "dev-processing-trigger-token"
+      PARSER_VERSION: "v1.0"
+      ENABLE_BACKFILL: "false"
+      BACKFILL_TRIGGER_TOKEN: "dev-backfill-trigger-token"
       TS_NODE_DEV: "true"
       TS_NODE_DEV_POLL: "true"
     volumes:

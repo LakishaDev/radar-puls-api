@@ -1,9 +1,9 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AppLogger } from "../common/app.logger";
 import { RawEventEntity } from "../database/raw-event.entity";
-import { ParsedEventEntity } from "../database/parsed-event.entity";
 import { ParsingService } from "../parsing/parsing.service";
 
 /**
@@ -15,11 +15,18 @@ export class BackfillService {
   constructor(
     @InjectRepository(RawEventEntity)
     private readonly rawEventsRepository: Repository<RawEventEntity>,
-    @InjectRepository(ParsedEventEntity)
-    private readonly parsedEventsRepository: Repository<ParsedEventEntity>,
     private readonly parsingService: ParsingService,
+    private readonly configService: ConfigService,
     private readonly logger: AppLogger,
   ) {}
+
+  private ensureEnabled(action: string): void {
+    const enabled = (this.configService.get<string>("ENABLE_BACKFILL") ?? "false") === "true";
+    if (!enabled) {
+      this.logger.warn("backfill_disabled_blocked", { action });
+      throw new Error("Backfill disabled via ENABLE_BACKFILL");
+    }
+  }
 
   /**
    * Backfill processed events — reparsira sve već processed zapise (bez pending/processing)
@@ -30,6 +37,7 @@ export class BackfillService {
     endDate?: Date;
     limit?: number;
   }): Promise<{ replayed: number; errors: number; duration: number }> {
+    this.ensureEnabled("processed_batch");
     const startTime = Date.now();
     let replayed = 0;
     let errors = 0;
@@ -109,6 +117,7 @@ export class BackfillService {
    * Backfill by specific raw event IDs — reparseuj samo određene zapise
    */
   async backfillByRawEventIds(ids: string[]): Promise<{ replayed: number; errors: number }> {
+    this.ensureEnabled("ids_replay");
     let replayed = 0;
     let errors = 0;
 
@@ -165,6 +174,7 @@ export class BackfillService {
    * Find processed events without parsed entries — recovery operacija
    */
   async findProcessedWithoutParsed(limit: number = 100): Promise<{ count: number }> {
+    this.ensureEnabled("find_missing");
     // Query: processed events where parsed_events is null
     const missingParsed = await this.rawEventsRepository.query(
       `

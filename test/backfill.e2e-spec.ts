@@ -1,16 +1,15 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { BackfillService } from "../src/processing/backfill.service";
 import { ParsingService } from "../src/parsing/parsing.service";
 import { RawEventEntity } from "../src/database/raw-event.entity";
-import { ParsedEventEntity } from "../src/database/parsed-event.entity";
 import { AppLogger } from "../src/common/app.logger";
 
 describe("BackfillService (e2e)", () => {
   let backfillService: BackfillService;
   let rawEventsRepository: Repository<RawEventEntity>;
-  let parsedEventsRepository: Repository<ParsedEventEntity>;
   let parsingService: ParsingService;
 
   const mockLogger = {
@@ -20,14 +19,20 @@ describe("BackfillService (e2e)", () => {
     debug: jest.fn(),
   };
 
+  const configValues: Record<string, string | undefined> = {
+    ENABLE_BACKFILL: "true",
+  };
+
+  const configServiceMock = {
+    get: jest.fn((key: string) => configValues[key]),
+  };
+
   beforeEach(async () => {
     const mockRawEventsRepository = {
       createQueryBuilder: jest.fn(),
       findOne: jest.fn(),
       query: jest.fn(),
     };
-
-    const mockParsedEventsRepository = {};
 
     const mockParsingService = {
       parseRawMessage: jest.fn(),
@@ -42,16 +47,16 @@ describe("BackfillService (e2e)", () => {
           useValue: mockRawEventsRepository,
         },
         {
-          provide: getRepositoryToken(ParsedEventEntity),
-          useValue: mockParsedEventsRepository,
-        },
-        {
           provide: ParsingService,
           useValue: mockParsingService,
         },
         {
           provide: AppLogger,
           useValue: mockLogger,
+        },
+        {
+          provide: ConfigService,
+          useValue: configServiceMock,
         },
       ],
     }).compile();
@@ -60,14 +65,12 @@ describe("BackfillService (e2e)", () => {
     rawEventsRepository = module.get<Repository<RawEventEntity>>(
       getRepositoryToken(RawEventEntity),
     );
-    parsedEventsRepository = module.get<Repository<ParsedEventEntity>>(
-      getRepositoryToken(ParsedEventEntity),
-    );
     parsingService = module.get<ParsingService>(ParsingService);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    configValues.ENABLE_BACKFILL = "true";
   });
 
   it("should backfill processed events with parsed results", async () => {
@@ -231,5 +234,13 @@ describe("BackfillService (e2e)", () => {
     );
 
     await expect(backfillService.findProcessedWithoutParsed(100)).rejects.toThrow();
+  });
+
+  it("throws when backfill is disabled via config", async () => {
+    configValues.ENABLE_BACKFILL = "false";
+
+    await expect(
+      backfillService.backfillProcessedEvents({ limit: 5 }),
+    ).rejects.toThrow("Backfill disabled via ENABLE_BACKFILL");
   });
 });

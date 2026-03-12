@@ -56,7 +56,7 @@ export class ParsingService {
     const parseStatus: ParseStatus =
       confidence >= CONFIDENCE_THRESHOLDS.MIN_FOR_PARSED ? "parsed" : "no_match";
 
-    return {
+    const result: ParsingResult = {
       status: parseStatus,
       eventType: eventType, // Always return detected type, even if no_match
       locationText,
@@ -70,6 +70,19 @@ export class ParsingService {
       confidence,
       signals,
     };
+
+    this.logger.info("parse_result", {
+      status: parseStatus,
+      event_type: eventType,
+      confidence,
+      has_location: Boolean(locationText),
+      has_time: Boolean(eventTime),
+      device_id: context.deviceId,
+      source: context.source,
+      group_name: context.groupName,
+    });
+
+    return result;
   }
 
   /**

@@ -4,16 +4,18 @@ Backend ingestion service for Radar Puls.
 
 ## Scope (Current)
 
-This repository is responsible for backend ingestion and pending-event worker processing:
+This repository is responsible for ingestion, worker processing, and rule-based parsing:
 
 - accept webhook events from Android listener
 - validate payload and authorization
 - store raw events in database
-- return deterministic API responses
+- process pending events in worker loop with claim/retry lifecycle
+- parse processed messages into structured `parsed_events`
+- support controlled backfill for already processed events
 
-Out of scope for initial backend milestone:
+Out of scope for current backend milestone:
 
-- AI parsing and normalization (planned for next phase)
+- LLM-based parsing
 - geocoding
 - map/public API
 - moderation workflow
@@ -61,6 +63,9 @@ Copy `.env.example` values into your runtime environment:
 - `WORKER_INSTANCE_ID` - optional worker identifier for logs/claims
 - `ENABLE_DEV_PROCESSING_TRIGGER` - allow dev-only one-batch trigger endpoint (`true`/`false`)
 - `PROCESSING_DEV_TRIGGER_TOKEN` - bearer token for dev trigger endpoint
+- `PARSER_VERSION` - parser version stored in `parsed_events.parser_version`
+- `ENABLE_BACKFILL` - allow backfill service/endpoint (`true`/`false`)
+- `BACKFILL_TRIGGER_TOKEN` - bearer token for backfill endpoint
 
 Example:
 
@@ -75,6 +80,9 @@ WORKER_MAX_RETRIES=3
 WORKER_INSTANCE_ID=dev-worker-1
 ENABLE_DEV_PROCESSING_TRIGGER=true
 PROCESSING_DEV_TRIGGER_TOKEN=dev-processing-trigger-token
+PARSER_VERSION=v1.0
+ENABLE_BACKFILL=false
+BACKFILL_TRIGGER_TOKEN=dev-backfill-trigger-token
 ```
 
 ### Commands
@@ -85,6 +93,7 @@ npm run build
 npm run migration:run
 npm run start:dev
 npm run start:worker:dev
+npm run start:backfill:dev
 ```
 
 Run tests:
@@ -155,6 +164,7 @@ Default compose values:
 - `GET /health`
 - `POST /api/events/viber`
 - `POST /api/processing/dev/run-once` (development only, bearer token protected)
+- `POST /api/processing/dev/backfill` (development/feature-flag only, bearer token protected)
 
 `POST /api/events/viber` contract:
 
@@ -177,3 +187,69 @@ Default compose values:
 
 - `429` response shape is implemented and can be forced with header `x-radar-force-429: 1` for contract testing.
 - Real rate limiting is intentionally deferred to next phase.
+
+## Parsing (Phase 3B)
+
+Parser is implemented in [src/parsing/parsing.service.ts](src/parsing/parsing.service.ts) and is integrated into worker processing flow.
+
+Rule engine behavior:
+
+- detects event type using Serbian keyword matching (`police`, `accident`, `traffic_jam`, `radar`, `control`, fallback `unknown`)
+- extracts location text using location markers (`kod`, `na`, `blizu`) while preserving original case
+- extracts explicit time expressions (`HH:mm`)
+- computes deterministic confidence score in range `0..1`
+
+Confidence heuristic:
+
+- +0.50 when event type is detected
+- +0.25 when location is detected
+- +0.15 when time is detected
+- +0.10 bonus when at least two signals are detected
+- threshold: `>= 0.5` => `parsed`, otherwise `no_match`
+
+Parse status semantics:
+
+- `parsed` means message has enough structured signal confidence
+- `no_match` means parser executed but did not find enough signal
+- `no_match` is still a successful worker outcome (`processing_status=processed`), not retryable failure
+
+## Backfill Runbook
+
+Backfill re-parses already processed events and writes/upserts records in `parsed_events`.
+
+### CLI
+
+Build first, then run:
+
+```bash
+npm run build
+npm run start:backfill -- --mode=processed --limit=100
+```
+
+CLI modes:
+
+- `--mode=processed` replay processed events (default)
+- `--mode=find-missing` count processed events without `parsed_events` row
+
+Optional flags:
+
+- `--limit=<N>` max rows per run
+- `--start=<ISO_DATE>` replay only events created after given timestamp
+
+### HTTP endpoint
+
+Endpoint:
+
+- `POST /api/processing/dev/backfill?limit=50&start=2026-03-01T00:00:00.000Z`
+
+Requirements:
+
+- `ENABLE_BACKFILL=true`
+- `BACKFILL_TRIGGER_TOKEN` set
+- header `Authorization: Bearer <BACKFILL_TRIGGER_TOKEN>`
+
+### Backfill env summary
+
+- `PARSER_VERSION` parser version value persisted with parse result
+- `ENABLE_BACKFILL` feature gate for service and endpoint
+- `BACKFILL_TRIGGER_TOKEN` endpoint auth token

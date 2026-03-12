@@ -1,8 +1,9 @@
-import { Controller, HttpCode, Post, Req, UseGuards, Body, Query } from "@nestjs/common";
+import { Controller, HttpCode, Post, Req, UseGuards, Query } from "@nestjs/common";
 import { RequestWithContext } from "../common/types";
 import { ProcessingDevGuard } from "./processing-dev.guard";
 import { ProcessingService } from "./processing.service";
 import { BackfillService } from "./backfill.service";
+import { ProcessingBackfillGuard } from "./backfill.guard";
 
 @Controller("/api/processing/dev")
 export class ProcessingController {
@@ -36,7 +37,7 @@ export class ProcessingController {
 
   @Post("/backfill")
   @HttpCode(200)
-  @UseGuards(ProcessingDevGuard)
+  @UseGuards(ProcessingBackfillGuard)
   async backfillProcessedEvents(
     @Req() req: RequestWithContext,
     @Query("limit") limit?: string,
