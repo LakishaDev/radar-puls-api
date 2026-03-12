@@ -5,6 +5,7 @@ import { hostname } from "node:os";
 import { Repository } from "typeorm";
 import { AppLogger } from "../common/app.logger";
 import { RawEventEntity } from "../database/raw-event.entity";
+import { ParsingService } from "../parsing/parsing.service";
 
 type BatchSource = "poller" | "manual-trigger";
 
@@ -18,6 +19,10 @@ type BatchResult = {
 type ClaimedEvent = {
   id: string;
   rawMessage: string;
+  source: string;
+  groupName: string;
+  receivedAt: Date;
+  deviceId: string;
 };
 
 const RETRY_BACKOFF_MS: Record<number, number> = {
@@ -42,6 +47,7 @@ export class ProcessingService implements OnModuleDestroy {
     private readonly rawEventsRepository: Repository<RawEventEntity>,
     private readonly configService: ConfigService,
     private readonly logger: AppLogger,
+    private readonly parsingService: ParsingService,
   ) {
     this.batchSize = this.getPositiveInt("WORKER_BATCH_SIZE", 100);
     this.pollIntervalMs = this.getPositiveInt("WORKER_POLL_INTERVAL_MS", 5000);
@@ -180,16 +186,20 @@ export class ProcessingService implements OnModuleDestroy {
         last_error = NULL
       FROM candidates
       WHERE re.id = candidates.id
-      RETURNING re.id, re.raw_message;
+      RETURNING re.id, re.raw_message, re.source, re.group_name, re.received_at, re.device_id;
       `,
       [this.batchSize, this.leaseTimeoutMs, this.instanceId],
-    )) as [Array<{ id?: string; raw_message?: string }>, number];
+    )) as [Array<{ id?: string; raw_message?: string; source?: string; group_name?: string; received_at?: Date; device_id?: string }>, number];
 
     return (rows ?? [])
       .filter((row) => typeof row.id === "string" && row.id.length > 0)
       .map((row) => ({
         id: row.id as string,
         rawMessage: row.raw_message ?? "",
+        source: row.source ?? "",
+        groupName: row.group_name ?? "",
+        receivedAt: row.received_at ?? new Date(),
+        deviceId: row.device_id ?? "",
       }));
   }
 
@@ -198,6 +208,19 @@ export class ProcessingService implements OnModuleDestroy {
       throw new Error("forced processing failure");
     }
 
+    // Parse raw message
+    const parseResult = await this.parsingService.parseRawMessage({
+      rawMessage: event.rawMessage,
+      receivedAt: event.receivedAt,
+      source: event.source,
+      groupName: event.groupName,
+      deviceId: event.deviceId,
+    });
+
+    // Persist parsed result
+    await this.parsingService.persistParsed(event.id, parseResult);
+
+    // Mark raw event as processed
     // TypeORM returns [rows, rowCount] for UPDATE commands
     const [rows] = (await this.rawEventsRepository.query(
       `
@@ -221,6 +244,14 @@ export class ProcessingService implements OnModuleDestroy {
     if ((rows ?? []).length !== 1) {
       throw new Error("processing state transition guard failed");
     }
+
+    this.logger.info("parse_success", {
+      worker_instance: this.instanceId,
+      raw_event_id: event.id,
+      parse_status: parseResult.status,
+      event_type: parseResult.eventType,
+      confidence: parseResult.confidence,
+    });
   }
 
   private async markRetryOrFailed(

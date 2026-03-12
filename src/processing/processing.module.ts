@@ -3,14 +3,21 @@ import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppLogger } from "../common/app.logger";
 import { RawEventEntity } from "../database/raw-event.entity";
+import { ParsedEventEntity } from "../database/parsed-event.entity";
+import { ParsingModule } from "../parsing/parsing.module";
 import { ProcessingController } from "./processing.controller";
 import { ProcessingDevGuard } from "./processing-dev.guard";
 import { ProcessingService } from "./processing.service";
+import { BackfillService } from "./backfill.service";
 
 @Module({
-  imports: [ConfigModule, TypeOrmModule.forFeature([RawEventEntity])],
+  imports: [
+    ConfigModule,
+    TypeOrmModule.forFeature([RawEventEntity, ParsedEventEntity]),
+    ParsingModule,
+  ],
   controllers: [ProcessingController],
-  providers: [ProcessingService, ProcessingDevGuard, AppLogger],
-  exports: [ProcessingService],
+  providers: [ProcessingService, BackfillService, ProcessingDevGuard, AppLogger],
+  exports: [ProcessingService, BackfillService],
 })
 export class ProcessingModule {}

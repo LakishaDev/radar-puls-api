@@ -54,6 +54,18 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   PROCESSING_DEV_TRIGGER_TOKEN?: string;
+
+  @IsOptional()
+  @IsString()
+  PARSER_VERSION?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  ENABLE_BACKFILL?: string;
+
+  @IsOptional()
+  @IsString()
+  BACKFILL_TRIGGER_TOKEN?: string;
 }
 
 export function validateEnv(

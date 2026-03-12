@@ -1,11 +1,15 @@
-import { Controller, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
+import { Controller, HttpCode, Post, Req, UseGuards, Body, Query } from "@nestjs/common";
 import { RequestWithContext } from "../common/types";
 import { ProcessingDevGuard } from "./processing-dev.guard";
 import { ProcessingService } from "./processing.service";
+import { BackfillService } from "./backfill.service";
 
 @Controller("/api/processing/dev")
 export class ProcessingController {
-  constructor(private readonly processingService: ProcessingService) {}
+  constructor(
+    private readonly processingService: ProcessingService,
+    private readonly backfillService: BackfillService,
+  ) {}
 
   @Post("/run-once")
   @HttpCode(200)
@@ -27,6 +31,37 @@ export class ProcessingController {
       processed_count: result.processedCount,
       failed_count: result.failedCount,
       duration_ms: result.durationMs,
+    };
+  }
+
+  @Post("/backfill")
+  @HttpCode(200)
+  @UseGuards(ProcessingDevGuard)
+  async backfillProcessedEvents(
+    @Req() req: RequestWithContext,
+    @Query("limit") limit?: string,
+    @Query("start") start?: string,
+  ): Promise<{
+    status: string;
+    request_id: string;
+    replayed: number;
+    errors: number;
+    duration_ms: number;
+  }> {
+    const limitNum = limit ? parseInt(limit, 10) : 50;
+    const startDate = start ? new Date(start) : undefined;
+
+    const result = await this.backfillService.backfillProcessedEvents({
+      startDate,
+      limit: limitNum,
+    });
+
+    return {
+      status: "ok",
+      request_id: req.requestId ?? "unknown",
+      replayed: result.replayed,
+      errors: result.errors,
+      duration_ms: result.duration,
     };
   }
 }

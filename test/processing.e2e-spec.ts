@@ -9,6 +9,8 @@ import { RawEventEntity } from "../src/database/raw-event.entity";
 import { ProcessingController } from "../src/processing/processing.controller";
 import { ProcessingDevGuard } from "../src/processing/processing-dev.guard";
 import { ProcessingService } from "../src/processing/processing.service";
+import { ParsingService } from "../src/parsing/parsing.service";
+import { ParsingResult } from "../src/parsing/types";
 
 describe("Processing (e2e)", () => {
   let app: INestApplication;
@@ -33,6 +35,11 @@ describe("Processing (e2e)", () => {
     error: jest.fn(),
   };
 
+  const parsingServiceMock = {
+    parseRawMessage: jest.fn(),
+    persistParsed: jest.fn(),
+  };
+
   beforeEach(async () => {
     repositoryMock.query.mockReset();
     configServiceMock.get.mockClear();
@@ -43,6 +50,29 @@ describe("Processing (e2e)", () => {
     loggerMock.info.mockClear();
     loggerMock.warn.mockClear();
     loggerMock.error.mockClear();
+
+    parsingServiceMock.parseRawMessage.mockClear();
+    parsingServiceMock.persistParsed.mockClear();
+    // Default mock return value for parser
+    parsingServiceMock.parseRawMessage.mockResolvedValue({
+      status: "parsed",
+      eventType: "police",
+      locationText: "Test Location",
+      description: "Test Description",
+      eventTime: null,
+      confidence: 0.8,
+    } as ParsingResult);
+    parsingServiceMock.persistParsed.mockResolvedValue({
+      id: "parsed-uuid",
+      rawEventId: "event-uuid",
+      parseStatus: "parsed",
+      eventType: "police",
+      locationText: "Test Location",
+      description: "Test Description",
+      eventTime: null,
+      confidence: 0.8,
+      parserVersion: "v1.0",
+    });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [ProcessingController],
@@ -60,6 +90,10 @@ describe("Processing (e2e)", () => {
         {
           provide: AppLogger,
           useValue: loggerMock,
+        },
+        {
+          provide: ParsingService,
+          useValue: parsingServiceMock,
         },
       ],
     }).compile();
