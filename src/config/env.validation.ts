@@ -1,5 +1,6 @@
 import { plainToInstance } from "class-transformer";
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -21,6 +22,38 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   NODE_ENV?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  WORKER_BATCH_SIZE?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  WORKER_POLL_INTERVAL_MS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  WORKER_LEASE_TIMEOUT_MS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  WORKER_MAX_RETRIES?: number;
+
+  @IsOptional()
+  @IsString()
+  WORKER_INSTANCE_ID?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  ENABLE_DEV_PROCESSING_TRIGGER?: string;
+
+  @IsOptional()
+  @IsString()
+  PROCESSING_DEV_TRIGGER_TOKEN?: string;
 }
 
 export function validateEnv(

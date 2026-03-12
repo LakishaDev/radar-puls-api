@@ -2,9 +2,9 @@
 
 Backend ingestion service for Radar Puls.
 
-## Scope (Phase 2)
+## Scope (Current)
 
-This repository is responsible for backend ingestion only:
+This repository is responsible for backend ingestion and pending-event worker processing:
 
 - accept webhook events from Android listener
 - validate payload and authorization
@@ -13,7 +13,7 @@ This repository is responsible for backend ingestion only:
 
 Out of scope for initial backend milestone:
 
-- AI parsing and normalization
+- AI parsing and normalization (planned for next phase)
 - geocoding
 - map/public API
 - moderation workflow
@@ -54,6 +54,13 @@ Copy `.env.example` values into your runtime environment:
 - `PORT` - API port
 - `DATABASE_URL` - PostgreSQL connection string
 - `DEVICE_TOKENS_JSON` - JSON map of `device_id -> bearer token`
+- `WORKER_BATCH_SIZE` - max claimed records per cycle (default 100)
+- `WORKER_POLL_INTERVAL_MS` - worker polling interval (default 5000)
+- `WORKER_LEASE_TIMEOUT_MS` - reclaim timeout for stuck processing leases (default 300000)
+- `WORKER_MAX_RETRIES` - number of retries before `failed` (default 3)
+- `WORKER_INSTANCE_ID` - optional worker identifier for logs/claims
+- `ENABLE_DEV_PROCESSING_TRIGGER` - allow dev-only one-batch trigger endpoint (`true`/`false`)
+- `PROCESSING_DEV_TRIGGER_TOKEN` - bearer token for dev trigger endpoint
 
 Example:
 
@@ -61,6 +68,13 @@ Example:
 PORT=3000
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/radar_puls
 DEVICE_TOKENS_JSON={"android_listener_01":"dev-token-01"}
+WORKER_BATCH_SIZE=100
+WORKER_POLL_INTERVAL_MS=5000
+WORKER_LEASE_TIMEOUT_MS=300000
+WORKER_MAX_RETRIES=3
+WORKER_INSTANCE_ID=dev-worker-1
+ENABLE_DEV_PROCESSING_TRIGGER=true
+PROCESSING_DEV_TRIGGER_TOKEN=dev-processing-trigger-token
 ```
 
 ### Commands
@@ -70,6 +84,7 @@ npm install
 npm run build
 npm run migration:run
 npm run start:dev
+npm run start:worker:dev
 ```
 
 Run tests:
@@ -130,6 +145,7 @@ newgrp docker
 Default compose values:
 
 - API: `http://localhost:3000`
+- Worker: separate `worker` service (`npm run start:worker:dev`)
 - DB host for API container: `db`
 - DB URL: `postgres://postgres:postgres@db:5432/radar_puls`
 - Persistent DB volume: `postgres_data`
@@ -138,6 +154,7 @@ Default compose values:
 
 - `GET /health`
 - `POST /api/events/viber`
+- `POST /api/processing/dev/run-once` (development only, bearer token protected)
 
 `POST /api/events/viber` contract:
 

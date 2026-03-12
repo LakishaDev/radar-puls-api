@@ -10,6 +10,11 @@ import {
 @Index("idx_raw_events_created_at", ["createdAt"])
 @Index("idx_raw_events_processing_status", ["processingStatus"])
 @Index("idx_raw_events_device_id", ["deviceId"])
+@Index("idx_raw_events_status_next_retry_created", [
+  "processingStatus",
+  "nextRetryAt",
+  "createdAt",
+])
 export class RawEventEntity {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -37,4 +42,25 @@ export class RawEventEntity {
 
   @Column({ type: "text", name: "processing_status", default: "pending" })
   processingStatus!: string;
+
+  @Column({ type: "integer", name: "retry_count", default: 0 })
+  retryCount!: number;
+
+  @Column({ type: "timestamptz", name: "next_retry_at", nullable: true })
+  nextRetryAt!: Date | null;
+
+  @Column({ type: "timestamptz", name: "processing_started_at", nullable: true })
+  processingStartedAt!: Date | null;
+
+  @Column({ type: "timestamptz", name: "processed_at", nullable: true })
+  processedAt!: Date | null;
+
+  @Column({ type: "timestamptz", name: "failed_at", nullable: true })
+  failedAt!: Date | null;
+
+  @Column({ type: "text", name: "last_error", nullable: true })
+  lastError!: string | null;
+
+  @Column({ type: "text", name: "processor_instance", nullable: true })
+  processorInstance!: string | null;
 }

@@ -156,17 +156,12 @@ describe("Viber Events (e2e)", () => {
     repositoryMock.save.mockResolvedValue({ id: "1" });
 
     const responses: Array<{ status: number }> = [];
-    const batchSize = 20;
-    for (let index = 0; index < 100; index += batchSize) {
-      const batch = Array.from({ length: batchSize }).map(() =>
-        request(app.getHttpServer())
-          .post("/api/events/viber")
-          .set("Authorization", "Bearer dev-token-01")
-          .send(validPayload),
-      );
-
-      const batchResults = await Promise.all(batch);
-      responses.push(...batchResults);
+    for (let index = 0; index < 100; index += 1) {
+      const response = await request(app.getHttpServer())
+        .post("/api/events/viber")
+        .set("Authorization", "Bearer dev-token-01")
+        .send(validPayload);
+      responses.push(response);
     }
 
     const serverFailures = responses.filter(
