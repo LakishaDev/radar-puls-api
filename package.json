@@ -15,7 +15,7 @@
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f api db",
-    "docker:migrate": "docker compose exec api npm run migration:run"
+    "docker:migrate": "docker compose exec -T api npm run migration:run"
   },
   "keywords": [],
   "author": "",

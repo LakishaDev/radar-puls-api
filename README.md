@@ -117,6 +117,16 @@ npm run docker:logs
 npm run docker:down
 ```
 
+WSL troubleshooting:
+
+- If `docker` is missing in Ubuntu WSL, enable your distro in Docker Desktop -> Settings -> Resources -> WSL Integration.
+- If Docker commands require `sudo`, add your user to the docker group and reopen the shell:
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
 Default compose values:
 
 - API: `http://localhost:3000`
