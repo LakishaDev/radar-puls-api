@@ -84,12 +84,46 @@ class EnvironmentVariables {
   @Min(1)
   ENRICHMENT_BATCH_SIZE?: number;
 
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ENRICHMENT_MAX_ATTEMPTS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1000)
+  ENRICHMENT_RETRY_COOLDOWN_MS?: number;
+
   @IsString()
   NOMINATIM_USER_AGENT!: string;
 
   @IsOptional()
   @IsIn(["true", "false"])
   GEO_ENABLED?: string;
+
+  @IsOptional()
+  @IsString()
+  CORS_ORIGIN?: string;
+
+  @IsOptional()
+  @IsString()
+  ADMIN_API_TOKEN?: string;
+
+  @IsOptional()
+  @IsString()
+  RECAPTCHA_SECRET_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  VAPID_PUBLIC_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  VAPID_PRIVATE_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  VAPID_SUBJECT?: string;
 }
 
 export function validateEnv(

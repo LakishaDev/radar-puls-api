@@ -15,6 +15,8 @@ import { RawEventEntity } from "./raw-event.entity";
 @Index("idx_parsed_events_event_type", ["eventType"])
 @Index("idx_parsed_events_created_at", ["createdAt"])
 @Index("idx_parsed_events_enrich_status_created_at", ["enrichStatus", "createdAt"])
+@Index("idx_parsed_events_moderation_status", ["moderationStatus"])
+@Index("idx_parsed_events_expires_at", ["expiresAt"])
 export class ParsedEventEntity {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -53,6 +55,12 @@ export class ParsedEventEntity {
   @Column({ type: "timestamptz", name: "enriched_at", nullable: true })
   enrichedAt!: Date | null;
 
+  @Column({ type: "int", name: "enrich_attempts", default: 0 })
+  enrichAttempts!: number;
+
+  @Column({ type: "timestamptz", name: "enrich_next_retry_at", nullable: true })
+  enrichNextRetryAt!: Date | null;
+
   @Column({ type: "double precision", name: "latitude", nullable: true })
   latitude!: number | null;
 
@@ -61,6 +69,39 @@ export class ParsedEventEntity {
 
   @Column({ type: "text", name: "geo_source", nullable: true })
   geoSource!: "fallback" | "nominatim" | null;
+
+  @Column({
+    type: "timestamptz",
+    name: "expires_at",
+    default: () => "NOW() + INTERVAL '2 hours'",
+  })
+  expiresAt!: Date;
+
+  @Column({ type: "int", name: "upvotes", default: 0 })
+  upvotes!: number;
+
+  @Column({ type: "int", name: "downvotes", default: 0 })
+  downvotes!: number;
+
+  @Column({
+    type: "text",
+    name: "moderation_status",
+    default: "auto_approved",
+  })
+  moderationStatus!:
+    | "auto_approved"
+    | "pending_review"
+    | "approved"
+    | "rejected";
+
+  @Column({ type: "text", name: "moderated_by", nullable: true })
+  moderatedBy!: string | null;
+
+  @Column({ type: "timestamptz", name: "moderated_at", nullable: true })
+  moderatedAt!: Date | null;
+
+  @Column({ type: "text", name: "moderation_note", nullable: true })
+  moderationNote!: string | null;
 
   @Column({ type: "text", name: "parser_version" })
   parserVersion!: string;

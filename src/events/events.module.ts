@@ -11,5 +11,6 @@ import { EventsService } from "./events.service";
   imports: [TypeOrmModule.forFeature([RawEventEntity, ParsedEventEntity]), AuthModule],
   controllers: [EventsController],
   providers: [EventsService, AppLogger],
+  exports: [EventsService],
 })
 export class EventsModule {}

@@ -8,9 +8,12 @@ import { NextFunction, Request, Response } from "express";
 import request from "supertest";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { GlobalHttpExceptionFilter } from "../src/common/http-exception.filter";
+import { MapPushSubscriptionEntity } from "../src/database/map-push-subscription.entity";
 import { ParsedEventEntity } from "../src/database/parsed-event.entity";
 import { RawEventEntity } from "../src/database/raw-event.entity";
 import { EventsModule } from "../src/events/events.module";
+import { MapModule } from "../src/map/map.module";
+import { StatsModule } from "../src/stats/stats.module";
 import { DeviceTokenService } from "../src/auth/device-token.service";
 
 describe("Events Map API (e2e)", () => {
@@ -23,6 +26,13 @@ describe("Events Map API (e2e)", () => {
 
   const parsedRepositoryMock = {
     query: jest.fn(),
+  };
+
+  const mapPushSubscriptionsRepositoryMock = {
+    upsert: jest.fn(),
+    delete: jest.fn(),
+    find: jest.fn().mockResolvedValue([]),
+    update: jest.fn(),
   };
 
   const tokenServiceMock = {
@@ -39,16 +49,22 @@ describe("Events Map API (e2e)", () => {
     rawRepositoryMock.create.mockClear();
     rawRepositoryMock.save.mockReset();
     parsedRepositoryMock.query.mockReset();
+    mapPushSubscriptionsRepositoryMock.upsert.mockReset();
+    mapPushSubscriptionsRepositoryMock.delete.mockReset();
+    mapPushSubscriptionsRepositoryMock.find.mockResolvedValue([]);
+    mapPushSubscriptionsRepositoryMock.update.mockReset();
     tokenServiceMock.assertAuthorized.mockClear();
     tokenServiceMock.assertTokenAuthorized.mockClear();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [EventsModule],
+      imports: [EventsModule, MapModule, StatsModule],
     })
       .overrideProvider(getRepositoryToken(RawEventEntity))
       .useValue(rawRepositoryMock)
       .overrideProvider(getRepositoryToken(ParsedEventEntity))
       .useValue(parsedRepositoryMock)
+      .overrideProvider(getRepositoryToken(MapPushSubscriptionEntity))
+      .useValue(mapPushSubscriptionsRepositoryMock)
       .overrideProvider(DeviceTokenService)
       .useValue(tokenServiceMock)
       .compile();
@@ -86,10 +102,16 @@ describe("Events Map API (e2e)", () => {
         event_type: "control",
         location_text: "Bulevar Nemanjica",
         sender_name: null,
+        description: "Kod Delte",
+        confidence: 0.84,
         event_time: "2026-03-12T22:25:00.000Z",
+        created_at: "2026-03-12T22:20:00.000Z",
+        expires_at: "2026-03-13T00:20:00.000Z",
         latitude: 43.3237,
         longitude: 21.896,
         geo_source: "fallback",
+        upvotes: 2,
+        downvotes: 0,
         raw_message: "bulevar duvaljka",
       },
     ]);
@@ -105,10 +127,16 @@ describe("Events Map API (e2e)", () => {
         eventType: "control",
         locationText: "Bulevar Nemanjica",
         senderName: null,
+        description: "Kod Delte",
+        confidence: 0.84,
         eventTime: "2026-03-12T22:25:00.000Z",
+        createdAt: "2026-03-12T22:20:00.000Z",
+        expiresAt: "2026-03-13T00:20:00.000Z",
         lat: 43.3237,
         lng: 21.896,
         geoSource: "fallback",
+        upvotes: 2,
+        downvotes: 0,
         rawMessage: "bulevar duvaljka",
       },
     ]);
@@ -141,5 +169,125 @@ describe("Events Map API (e2e)", () => {
       .get("/api/events/map")
       .set("Authorization", "Bearer wrong-token")
       .expect(401);
+  });
+
+  it("returns public map reports without auth and without rawMessage", async () => {
+    parsedRepositoryMock.query.mockResolvedValueOnce([
+      {
+        id: "parsed-2",
+        event_type: "police",
+        location_text: "Centar",
+        sender_name: "Pera",
+        description: "Punkt",
+        confidence: "0.72",
+        event_time: "2026-03-13T08:10:00.000Z",
+        created_at: "2026-03-13T08:05:00.000Z",
+        expires_at: "2026-03-13T10:05:00.000Z",
+        latitude: 43.3201,
+        longitude: 21.9002,
+        geo_source: "nominatim",
+        upvotes: 0,
+        downvotes: 0,
+      },
+    ]);
+
+    const response = await request(app.getHttpServer())
+      .get("/api/map/reports?geoOnly=false")
+      .expect(200);
+
+    expect(response.body).toEqual([
+      {
+        id: "parsed-2",
+        eventType: "police",
+        locationText: "Centar",
+        senderName: "Pera",
+        description: "Punkt",
+        confidence: 0.72,
+        eventTime: "2026-03-13T08:10:00.000Z",
+        createdAt: "2026-03-13T08:05:00.000Z",
+        expiresAt: "2026-03-13T10:05:00.000Z",
+        lat: 43.3201,
+        lng: 21.9002,
+        geoSource: "nominatim",
+        upvotes: 0,
+        downvotes: 0,
+      },
+    ]);
+  });
+
+  it("accepts one vote per report and returns updated counters", async () => {
+    parsedRepositoryMock.query
+      .mockResolvedValueOnce([{ id: "parsed-2" }])
+      .mockResolvedValueOnce([{ id: "vote-1" }])
+      .mockResolvedValueOnce([
+        {
+          id: "parsed-2",
+          upvotes: 1,
+          downvotes: 0,
+        },
+      ]);
+
+    const response = await request(app.getHttpServer())
+      .post("/api/map/reports/parsed-2/vote")
+      .send({ vote: "up" })
+      .expect(201);
+
+    expect(response.body).toEqual({
+      id: "parsed-2",
+      upvotes: 1,
+      downvotes: 0,
+    });
+  });
+
+  it("rate limits repeated vote from same client for one report", async () => {
+    parsedRepositoryMock.query
+      .mockResolvedValueOnce([{ id: "parsed-2" }])
+      .mockResolvedValueOnce([]);
+
+    await request(app.getHttpServer())
+      .post("/api/map/reports/parsed-2/vote")
+      .send({ vote: "down" })
+      .expect(429);
+  });
+
+  it("returns public statistics payload", async () => {
+    parsedRepositoryMock.query
+      .mockResolvedValueOnce([
+        {
+          total_reports_today: 7,
+          total_reports_week: 32,
+          busiest_area: "Bulevar Nemanjica",
+          most_common_type: "police",
+          peak_hour: "17:00",
+        },
+      ])
+      .mockResolvedValueOnce([
+        { type: "police", count: 10 },
+        { type: "radar", count: 8 },
+      ])
+      .mockResolvedValueOnce([
+        { hour: 8, count: 3 },
+        { hour: 17, count: 6 },
+      ]);
+
+    const response = await request(app.getHttpServer())
+      .get("/api/stats/public")
+      .expect(200);
+
+    expect(response.body).toEqual({
+      total_reports_today: 7,
+      total_reports_week: 32,
+      busiest_area: "Bulevar Nemanjica",
+      most_common_type: "police",
+      peak_hour: "17:00",
+      reports_by_type: [
+        { type: "police", count: 10 },
+        { type: "radar", count: 8 },
+      ],
+      reports_by_hour: [
+        { hour: 8, count: 3 },
+        { hour: 17, count: 6 },
+      ],
+    });
   });
 });

@@ -24,7 +24,24 @@ type FlatFallback = {
 };
 
 const LOCAL_FALLBACK_ENTRIES: FallbackEntry[] = [
-
+  { phrases: ["kalkan", "kod kalkana"], lat: 43.3203, lng: 21.8958 },
+  { phrases: ["bulevar medijana"], lat: 43.32, lng: 21.91 },
+  { phrases: ["bulevar nemanjića", "bulevar"], lat: 43.3237, lng: 21.896 },
+  { phrases: ["medijana"], lat: 43.318, lng: 21.915 },
+  { phrases: ["palilula"], lat: 43.333, lng: 21.906 },
+  { phrases: ["pantelej"], lat: 43.307, lng: 21.93 },
+  { phrases: ["čair", "cair"], lat: 43.326, lng: 21.906 },
+  { phrases: ["niška tvrdjava", "tvrđava", "tvrdava"], lat: 43.3215, lng: 21.9005 },
+  { phrases: ["jagodička", "jagodicka"], lat: 43.33, lng: 21.912 },
+  { phrases: ["vojvode tankosića", "tankosica"], lat: 43.319, lng: 21.896 },
+  { phrases: ["kopitareva česma", "kopitareva"], lat: 43.315, lng: 21.891 },
+  { phrases: ["niški sajam", "sajam"], lat: 43.309, lng: 21.905 },
+  { phrases: ["niška banja", "banja"], lat: 43.295, lng: 22.01 },
+  { phrases: ["sićevo", "sicevo"], lat: 43.36, lng: 22.07 },
+  { phrases: ["leskovački put"], lat: 43.292, lng: 21.897 },
+  { phrases: ["beogradski put", "beogradska"], lat: 43.338, lng: 21.888 },
+  { phrases: ["brzi put", "obilaznica", "obilaznca"], lat: 43.3, lng: 21.87 },
+  { phrases: ["zeleni venac"], lat: 43.3225, lng: 21.899 },
 ];
 
 const FLAT_FALLBACKS: FlatFallback[] = LOCAL_FALLBACK_ENTRIES.flatMap((entry) =>

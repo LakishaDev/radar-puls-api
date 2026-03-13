@@ -15,9 +15,7 @@ This repository is responsible for ingestion, worker processing, and rule-based 
 
 Out of scope for current backend milestone:
 
-- geocoding
-- map/public API
-- moderation workflow
+- none (Phase 6 backend APIs implemented)
 
 ## Recommended Stack
 
@@ -69,6 +67,14 @@ Copy `.env.example` values into your runtime environment:
 - `BACKFILL_TRIGGER_TOKEN` - bearer token for backfill endpoint
 - `ENRICHMENT_POLL_INTERVAL_MS` - enrichment poll interval (default 10000)
 - `ENRICHMENT_BATCH_SIZE` - enrichment batch size (default 10)
+- `ENRICHMENT_MAX_ATTEMPTS` - max enrichment retries before permanent `failed` (default 3)
+- `ENRICHMENT_RETRY_COOLDOWN_MS` - base retry cooldown for enrichment retry backoff (default 60000)
+- `CORS_ORIGIN` - optional comma-separated allowed web origins for CORS
+- `ADMIN_API_TOKEN` - static bearer token used by admin endpoints/guard
+- `RECAPTCHA_SECRET_KEY` - optional reCAPTCHA secret for public report submission
+- `VAPID_PUBLIC_KEY` - optional Web Push VAPID public key
+- `VAPID_PRIVATE_KEY` - optional Web Push VAPID private key
+- `VAPID_SUBJECT` - optional VAPID subject (e.g. `mailto:alerts@domain.com`)
 
 Example:
 
@@ -85,6 +91,14 @@ WORKER_MAX_RETRIES=3
 WORKER_INSTANCE_ID=dev-worker-1
 ENRICHMENT_POLL_INTERVAL_MS=10000
 ENRICHMENT_BATCH_SIZE=10
+ENRICHMENT_MAX_ATTEMPTS=3
+ENRICHMENT_RETRY_COOLDOWN_MS=60000
+CORS_ORIGIN=http://localhost:3000
+ADMIN_API_TOKEN=dev-admin-token
+RECAPTCHA_SECRET_KEY=
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:alerts@radar-puls.local
 ENABLE_DEV_PROCESSING_TRIGGER=true
 PROCESSING_DEV_TRIGGER_TOKEN=dev-processing-trigger-token
 PARSER_VERSION=v1.0
@@ -172,8 +186,28 @@ Default compose values:
 
 - `GET /health`
 - `POST /api/events/viber`
+- `GET /api/events/map` (device auth protected, includes `rawMessage`)
+- `GET /api/map/reports` (public, IP rate limited, no `rawMessage`)
+- `POST /api/map/reports` (public submission, stricter IP rate limit, pending moderation)
+- `POST /api/map/reports/:id/vote` (public, one vote per IP/report)
+- `POST /api/map/subscriptions` (public, register Web Push subscription)
+- `DELETE /api/map/subscriptions` (public, unregister Web Push subscription)
+- `GET /api/stats/public` (public map statistics)
+- `GET /api/admin/events` (admin token protected)
+- `GET /api/admin/events/:id` (admin token protected)
+- `PATCH /api/admin/events/:id` (admin token protected)
+- `POST /api/admin/events/:id/approve` (admin token protected)
+- `POST /api/admin/events/:id/reject` (admin token protected)
+- `GET /api/admin/stats` (admin token protected)
+- `POST /api/admin/events/:id/re-enrich` (admin token protected)
+- `POST /api/admin/events/re-enrich-batch` (admin token protected)
 - `POST /api/processing/dev/run-once` (development only, bearer token protected)
 - `POST /api/processing/dev/backfill` (development/feature-flag only, bearer token protected)
+
+Realtime channel:
+
+- `WS /ws` (Socket.IO path)
+- emitted events: `new_report`, `report_updated`, `report_removed`
 
 `POST /api/events/viber` contract:
 

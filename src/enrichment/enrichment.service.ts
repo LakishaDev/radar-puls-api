@@ -1,17 +1,20 @@
-import { Injectable, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import OpenAI from "openai";
 import { Repository } from "typeorm";
 import { AppLogger } from "../common/app.logger";
 import { ParsedEventEntity } from "../database/parsed-event.entity";
+import { MapEventDto } from "../events/dto/map-event.dto";
 import { GeocodingService } from "../geocoding/geocoding.service";
 import { EventType } from "../parsing/types";
+import { RealtimePublisher } from "../realtime/realtime.publisher";
 
 type PendingEnrichmentRecord = {
   id: string;
   rawEventId: string;
   rawMessage: string;
+  enrichAttempts: number;
 };
 
 type EnrichmentExtraction = {
@@ -34,6 +37,8 @@ export class EnrichmentService implements OnModuleDestroy {
   private readonly pollIntervalMs: number;
   private readonly batchSize: number;
   private readonly model: string;
+  private readonly maxAttempts: number;
+  private readonly retryBaseMs: number;
   private readonly openai: OpenAI;
 
   private pollTimer: NodeJS.Timeout | null = null;
@@ -45,10 +50,13 @@ export class EnrichmentService implements OnModuleDestroy {
     private readonly geocodingService: GeocodingService,
     private readonly configService: ConfigService,
     private readonly logger: AppLogger,
+    @Optional() private readonly realtimePublisher?: RealtimePublisher,
   ) {
     this.pollIntervalMs = this.getPositiveInt("ENRICHMENT_POLL_INTERVAL_MS", 10_000);
     this.batchSize = this.getPositiveInt("ENRICHMENT_BATCH_SIZE", 10);
     this.model = this.configService.get<string>("OPENAI_MODEL") ?? "gpt-4o-mini";
+    this.maxAttempts = this.getPositiveInt("ENRICHMENT_MAX_ATTEMPTS", 3);
+    this.retryBaseMs = this.getPositiveInt("ENRICHMENT_RETRY_COOLDOWN_MS", 60_000);
     this.openai = new OpenAI({
       apiKey: this.configService.getOrThrow<string>("OPENAI_API_KEY"),
     });
@@ -130,20 +138,27 @@ export class EnrichmentService implements OnModuleDestroy {
   private async findPending(limit: number): Promise<PendingEnrichmentRecord[]> {
     const rows = (await this.parsedEventsRepository.query(
       `
-      SELECT pe.id, pe.raw_event_id, re.raw_message
+      SELECT pe.id, pe.raw_event_id, re.raw_message, pe.enrich_attempts
       FROM parsed_events pe
       INNER JOIN raw_events re ON re.id = pe.raw_event_id
       WHERE pe.enrich_status = 'pending'
+        AND (pe.enrich_next_retry_at IS NULL OR pe.enrich_next_retry_at <= NOW())
       ORDER BY pe.created_at ASC
       LIMIT $1
       `,
       [limit],
-    )) as Array<{ id: string; raw_event_id: string; raw_message: string }>;
+    )) as Array<{
+      id: string;
+      raw_event_id: string;
+      raw_message: string;
+      enrich_attempts: number;
+    }>;
 
     return rows.map((row) => ({
       id: row.id,
       rawEventId: row.raw_event_id,
       rawMessage: row.raw_message,
+      enrichAttempts: row.enrich_attempts,
     }));
   }
 
@@ -186,22 +201,61 @@ export class EnrichmentService implements OnModuleDestroy {
         geo_source: geoResult?.source ?? null,
       });
 
+      if (this.realtimePublisher) {
+        const report = await this.findVisibleReportById(event.id);
+        if (report) {
+          this.realtimePublisher.publish({
+            type: "new_report",
+            reportId: report.id,
+            payload: report,
+          });
+        }
+      }
+
       return true;
     } catch (error) {
-      await this.parsedEventsRepository.query(
-        `
-        UPDATE parsed_events
-        SET
-          enrich_status = 'failed',
-          updated_at = NOW()
-        WHERE id = $1
-        `,
-        [event.id],
-      );
+      const newAttempts = event.enrichAttempts + 1;
+      const exhausted = newAttempts >= this.maxAttempts;
+
+      if (exhausted) {
+        await this.parsedEventsRepository.query(
+          `
+          UPDATE parsed_events
+          SET
+            enrich_status = 'failed',
+            enrich_attempts = $2,
+            enrich_next_retry_at = $3,
+            updated_at = NOW()
+          WHERE id = $1
+          `,
+          [event.id, newAttempts, null],
+        );
+      } else {
+        const delayMs = Math.min(
+          this.retryBaseMs * Math.pow(2, newAttempts - 1),
+          3_600_000,
+        );
+        const retryAt = new Date(Date.now() + delayMs);
+
+        await this.parsedEventsRepository.query(
+          `
+          UPDATE parsed_events
+          SET
+            enrich_status = 'pending',
+            enrich_attempts = $2,
+            enrich_next_retry_at = $3,
+            updated_at = NOW()
+          WHERE id = $1
+          `,
+          [event.id, newAttempts, retryAt],
+        );
+      }
 
       this.logger.error("enrichment_failed", {
         parsed_event_id: event.id,
         raw_event_id: event.rawEventId,
+        attempt: newAttempts,
+        exhausted,
         error: error instanceof Error ? error.message : "unknown enrichment error",
       });
 
@@ -300,6 +354,73 @@ Odgovori samo JSON bez objasnjenja.`,
     }
 
     return fallback;
+  }
+
+  private async findVisibleReportById(id: string): Promise<MapEventDto | null> {
+    const rows = (await this.parsedEventsRepository.query(
+      `
+      SELECT
+        pe.id,
+        pe.event_type,
+        pe.location_text,
+        pe.sender_name,
+        pe.description,
+        pe.confidence,
+        pe.event_time,
+        pe.created_at,
+        pe.expires_at,
+        pe.latitude,
+        pe.longitude,
+        pe.geo_source,
+        pe.upvotes,
+        pe.downvotes
+      FROM parsed_events pe
+      WHERE pe.id = $1
+        AND pe.enriched_at IS NOT NULL
+        AND pe.expires_at > NOW()
+        AND pe.moderation_status IN ('auto_approved', 'approved')
+        AND pe.downvotes <= pe.upvotes * 2
+      LIMIT 1
+      `,
+      [id],
+    )) as Array<{
+      id: string;
+      event_type: string;
+      location_text: string | null;
+      sender_name: string | null;
+      description: string | null;
+      confidence: number;
+      event_time: Date | null;
+      created_at: Date;
+      expires_at: Date;
+      latitude: number | null;
+      longitude: number | null;
+      geo_source: "fallback" | "nominatim" | null;
+      upvotes: number;
+      downvotes: number;
+    }>;
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const row = rows[0];
+    return {
+      id: row.id,
+      eventType: row.event_type,
+      locationText: row.location_text,
+      senderName: row.sender_name,
+      description: row.description,
+      confidence: Number(row.confidence),
+      eventTime: row.event_time,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      lat: row.latitude,
+      lng: row.longitude,
+      geoSource: row.geo_source,
+      upvotes: Number(row.upvotes),
+      downvotes: Number(row.downvotes),
+    };
   }
 
 }

@@ -1,7 +1,11 @@
 import "reflect-metadata";
+import * as dotenv from "dotenv";
 import { DataSource } from "typeorm";
+
+dotenv.config();
 import { RawEventEntity } from "./raw-event.entity";
 import { ParsedEventEntity } from "./parsed-event.entity";
+import { MapPushSubscriptionEntity } from "./map-push-subscription.entity";
 
 const migrationGlob = __filename.endsWith(".ts")
   ? "src/database/migrations/*.ts"
@@ -10,7 +14,7 @@ const migrationGlob = __filename.endsWith(".ts")
 export const AppDataSource = new DataSource({
   type: "postgres",
   url: process.env.DATABASE_URL,
-  entities: [RawEventEntity, ParsedEventEntity],
+  entities: [RawEventEntity, ParsedEventEntity, MapPushSubscriptionEntity],
   migrations: [migrationGlob],
   synchronize: false,
 });

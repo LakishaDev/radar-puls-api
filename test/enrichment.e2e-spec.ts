@@ -20,6 +20,8 @@ describe("EnrichmentService (e2e)", () => {
     OPENAI_MODEL: "gpt-4o-mini",
     ENRICHMENT_POLL_INTERVAL_MS: "10000",
     ENRICHMENT_BATCH_SIZE: "10",
+    ENRICHMENT_MAX_ATTEMPTS: "3",
+    ENRICHMENT_RETRY_COOLDOWN_MS: "60000",
     NOMINATIM_USER_AGENT: "radar-puls-api/1.0 (contact: test@local)",
     GEO_ENABLED: "true",
   };
@@ -90,6 +92,7 @@ describe("EnrichmentService (e2e)", () => {
           id: "parsed-1",
           raw_event_id: "raw-1",
           raw_message: "Marko Bulevar Nemanjica 09:12",
+          enrich_attempts: 0,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
@@ -126,30 +129,35 @@ describe("EnrichmentService (e2e)", () => {
     ]);
   });
 
-  it("marks record as failed when enrichment throws", async () => {
+  it("schedules retry after first failure", async () => {
+    const before = Date.now();
+
     (parsedEventsRepository.query as jest.Mock)
       .mockResolvedValueOnce([
         {
-          id: "parsed-2",
-          raw_event_id: "raw-2",
-          raw_message: "Nepoznata poruka",
+          id: "p-1",
+          raw_event_id: "r-1",
+          raw_message: "neka poruka",
+          enrich_attempts: 0,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
 
     jest
       .spyOn(enrichmentService as any, "extractStructuredData")
-      .mockRejectedValue(new Error("openai unavailable"));
+      .mockRejectedValue(new Error("openai down"));
 
     const result = await enrichmentService.pollAndEnrich(10);
 
-    expect(result.claimedCount).toBe(1);
-    expect(result.enrichedCount).toBe(0);
     expect(result.failedCount).toBe(1);
 
-    expect(parsedEventsRepository.query).toHaveBeenCalledTimes(2);
-    const failedUpdateCall = (parsedEventsRepository.query as jest.Mock).mock.calls[1];
-    expect(failedUpdateCall[1]).toEqual(["parsed-2"]);
+    const updateCall = (parsedEventsRepository.query as jest.Mock).mock.calls[1];
+    const params = updateCall[1] as [string, number, Date];
+
+    expect(params[0]).toBe("p-1");
+    expect(params[1]).toBe(1);
+    expect(params[2]).toBeInstanceOf(Date);
+    expect(params[2].getTime()).toBeGreaterThan(before);
   });
 
   it("keeps current event type when AI does not return it", async () => {
@@ -159,6 +167,7 @@ describe("EnrichmentService (e2e)", () => {
           id: "parsed-3",
           raw_event_id: "raw-3",
           raw_message: "Petar kod Delte",
+          enrich_attempts: 0,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
@@ -183,5 +192,96 @@ describe("EnrichmentService (e2e)", () => {
       null,
       null,
     ]);
+  });
+
+  it("schedules longer cooldown on second failure (exponential backoff)", async () => {
+    (parsedEventsRepository.query as jest.Mock)
+      .mockResolvedValueOnce([
+        {
+          id: "p-2",
+          raw_event_id: "r-2",
+          raw_message: "neka poruka",
+          enrich_attempts: 1,
+        },
+      ])
+      .mockResolvedValueOnce([[], 1]);
+
+    jest
+      .spyOn(enrichmentService as any, "extractStructuredData")
+      .mockRejectedValue(new Error("openai down"));
+
+    const before = Date.now();
+    await enrichmentService.pollAndEnrich(10);
+
+    const params = (parsedEventsRepository.query as jest.Mock).mock.calls[1][1] as [
+      string,
+      number,
+      Date,
+    ];
+    expect(params[1]).toBe(2);
+    expect(params[2].getTime()).toBeGreaterThanOrEqual(before + 100_000);
+  });
+
+  it("permanently fails record after maxAttempts exhausted", async () => {
+    (parsedEventsRepository.query as jest.Mock)
+      .mockResolvedValueOnce([
+        {
+          id: "p-3",
+          raw_event_id: "r-3",
+          raw_message: "neka poruka",
+          enrich_attempts: 2,
+        },
+      ])
+      .mockResolvedValueOnce([[], 1]);
+
+    jest
+      .spyOn(enrichmentService as any, "extractStructuredData")
+      .mockRejectedValue(new Error("openai down"));
+
+    await enrichmentService.pollAndEnrich(10);
+
+    const updateSql = (parsedEventsRepository.query as jest.Mock).mock.calls[1][0] as string;
+    const params = (parsedEventsRepository.query as jest.Mock).mock.calls[1][1] as unknown[];
+
+    expect(updateSql).toContain("enrich_status = 'failed'");
+    expect(params[0]).toBe("p-3");
+    expect(params[1]).toBe(3);
+    expect(params[2]).toBeNull();
+  });
+
+  it("enriches successfully on retry attempt", async () => {
+    (parsedEventsRepository.query as jest.Mock)
+      .mockResolvedValueOnce([
+        {
+          id: "p-4",
+          raw_event_id: "r-4",
+          raw_message: "Petar bulevar",
+          enrich_attempts: 1,
+        },
+      ])
+      .mockResolvedValueOnce([[], 1]);
+
+    jest
+      .spyOn(enrichmentService as any, "extractStructuredData")
+      .mockResolvedValue({
+        senderName: "Petar",
+        locationText: "Bulevar Nemanjica",
+        eventType: "radar",
+      });
+    geocodingServiceMock.geocodeLocation.mockResolvedValueOnce(null);
+
+    const result = await enrichmentService.pollAndEnrich(10);
+
+    expect(result.enrichedCount).toBe(1);
+    expect(result.failedCount).toBe(0);
+  });
+
+  it("findPending query filters by enrich_next_retry_at", async () => {
+    (parsedEventsRepository.query as jest.Mock).mockResolvedValueOnce([]);
+
+    await enrichmentService.pollAndEnrich(10);
+
+    const sql = (parsedEventsRepository.query as jest.Mock).mock.calls[0][0] as string;
+    expect(sql).toContain("enrich_next_retry_at");
   });
 });

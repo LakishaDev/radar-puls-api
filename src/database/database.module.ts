@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { MapPushSubscriptionEntity } from "./map-push-subscription.entity";
 import { RawEventEntity } from "./raw-event.entity";
 import { ParsedEventEntity } from "./parsed-event.entity";
 
@@ -12,12 +13,16 @@ import { ParsedEventEntity } from "./parsed-event.entity";
       useFactory: (configService: ConfigService) => ({
         type: "postgres" as const,
         url: configService.getOrThrow<string>("DATABASE_URL"),
-        entities: [RawEventEntity, ParsedEventEntity],
+        entities: [RawEventEntity, ParsedEventEntity, MapPushSubscriptionEntity],
         synchronize: false,
         logging: false,
       }),
     }),
-    TypeOrmModule.forFeature([RawEventEntity, ParsedEventEntity]),
+    TypeOrmModule.forFeature([
+      RawEventEntity,
+      ParsedEventEntity,
+      MapPushSubscriptionEntity,
+    ]),
   ],
   exports: [TypeOrmModule],
 })
