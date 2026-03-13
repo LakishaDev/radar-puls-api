@@ -17,7 +17,7 @@ describe("EnrichmentService (e2e)", () => {
 
   const configValues: Record<string, string | undefined> = {
     OPENAI_API_KEY: "test-openai-key",
-    OPENAI_MODEL: "gpt-4o-mini",
+    OPENAI_MODEL: "gpt-5-mini",
     ENRICHMENT_POLL_INTERVAL_MS: "10000",
     ENRICHMENT_BATCH_SIZE: "10",
     ENRICHMENT_MAX_ATTEMPTS: "3",

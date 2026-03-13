@@ -41,7 +41,7 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/radar_puls
       DEVICE_TOKENS_JSON: '{"android_listener_01":"dev-token-01"}'
       OPENAI_API_KEY: "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"
-      OPENAI_MODEL: "gpt-4o-mini"
+      OPENAI_MODEL: "gpt-5-mini"
       NOMINATIM_USER_AGENT: "radar-puls-api/1.0 (contact: dev@radarpuls.local)"
       GEO_ENABLED: "true"
       WORKER_BATCH_SIZE: 100
@@ -78,7 +78,7 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/radar_puls
       DEVICE_TOKENS_JSON: '{"android_listener_01":"dev-token-01"}'
       OPENAI_API_KEY: "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"
-      OPENAI_MODEL: "gpt-4o-mini"
+      OPENAI_MODEL: "gpt-5-mini"
       NOMINATIM_USER_AGENT: "radar-puls-api/1.0 (contact: dev@radarpuls.local)"
       GEO_ENABLED: "true"
       WORKER_BATCH_SIZE: 100
@@ -114,7 +114,7 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/radar_puls
       DEVICE_TOKENS_JSON: '{"android_listener_01":"dev-token-01"}'
       OPENAI_API_KEY: "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"
-      OPENAI_MODEL: "gpt-4o-mini"
+      OPENAI_MODEL: "gpt-5-mini"
       NOMINATIM_USER_AGENT: "radar-puls-api/1.0 (contact: dev@radarpuls.local)"
       GEO_ENABLED: "true"
       WORKER_BATCH_SIZE: 100

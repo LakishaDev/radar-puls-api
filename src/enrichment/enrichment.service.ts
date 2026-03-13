@@ -54,7 +54,7 @@ export class EnrichmentService implements OnModuleDestroy {
   ) {
     this.pollIntervalMs = this.getPositiveInt("ENRICHMENT_POLL_INTERVAL_MS", 10_000);
     this.batchSize = this.getPositiveInt("ENRICHMENT_BATCH_SIZE", 10);
-    this.model = this.configService.get<string>("OPENAI_MODEL") ?? "gpt-4o-mini";
+    this.model = this.configService.get<string>("OPENAI_MODEL") ?? "gpt-5-mini";
     this.maxAttempts = this.getPositiveInt("ENRICHMENT_MAX_ATTEMPTS", 3);
     this.retryBaseMs = this.getPositiveInt("ENRICHMENT_RETRY_COOLDOWN_MS", 60_000);
     this.openai = new OpenAI({
@@ -264,47 +264,104 @@ export class EnrichmentService implements OnModuleDestroy {
   }
 
   private async extractStructuredData(rawMessage: string): Promise<EnrichmentExtraction> {
+    const supportsTemperature = this.model.startsWith("gpt-4") || this.model.startsWith("gpt-3");
     const completion = await this.openai.chat.completions.create({
       model: this.model,
-      temperature: 0,
+      ...(supportsTemperature ? { temperature: 0 } : {}),
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content: `Analiziraj kratke Viber poruke o saobracaju u Nisu.
 
-Vrati JSON:
-{"senderName":string|null,"locationText":string|null,"eventType":"police"|"accident"|"traffic_jam"|"radar"|"control"|"unknown","lat":number|null,"lng":number|null}
+Vrati JSON u formatu:
+{
+  "senderName": string|null,
+  "locationText": string|null,
+  "eventType": "police"|"accident"|"traffic_jam"|"radar"|"control"|"unknown",
+  "lat": number|null,
+  "lng": number|null
+}
 
-Pravila:
+PRAVILA
 
-senderName
-- licno ime samo ako je na pocetku poruke (Marko, Petar, Ana)
-- nazivi ulica ili mesta NISU imena
-- ako nema imena vrati null
+1. senderName
+- Licno ime samo ako se nalazi na samom pocetku poruke.
+- Primer: "Marko radar kod delte".
+- Imena ulica, objekata ili mesta nisu imena.
+- Ako nema imena vrati null.
 
-eventType
-- duvaljka, alkotest, puse, zaustavljaju, kontrola → control
-- murija, policija, mup, saobrac → police
-- radar, laser, merenje → radar
-- guzva, kolona, stoji → traffic_jam
-- sudar, udes, cukanje → accident
+2. eventType
+Prepoznaj dogadjaj iz poruke:
 
-locationText
-- pretvori lokalni naziv u lokaciju pogodnu za OpenStreetMap Nominatim
-- format: "<naziv mesta>, Nis"
-- ukloni reci: kod, preko puta, ispred, iza
-- primeri:
-  "kod disa" → "DIS, Nis"
-  "kod stop shopa" → "Stop Shop, Nis"
-  "kod delte" → "Delta Planet, Nis"
-  "kod elektronskog" → "Elektronska industrija, Nis"
-  "bulevar nemanjica" → "Bulevar Nemanjica, Nis"
+control
+- duvaljka
+- alkotest
+- puse
+- zaustavljaju
+- kontrola
 
-lat/lng
-- ako nisi siguran vrati null
+police
+- murija
+- policija
+- mup
+- saobracajci
+- patrola
 
-Odgovori samo JSON bez objasnjenja.`,
+radar
+- radar
+- laser
+- merenje
+- brzina
+
+traffic_jam
+- guzva
+- kolona
+- stoji
+- kolaps
+
+accident
+- sudar
+- udes
+- cukanje
+- pao
+- oboren
+
+Ako nije jasno → "unknown".
+
+3. locationText
+Pretvori lokalni naziv mesta u lokaciju pogodnu za OpenStreetMap Nominatim.
+
+Format mora biti:
+"<naziv mesta>, Nis"
+
+Ukloni reci:
+kod
+preko puta
+ispred
+iza
+posle
+
+Primeri normalizacije:
+
+"kod disa" → "DIS, Nis"
+"kod stop shopa" → "Stop Shop, Nis"
+"kod delte" → "Delta Planet, Nis"
+"kod elektronskog" → "Elektronska industrija, Nis"
+"bulevar nemanjica" → "Bulevar Nemanjica, Nis"
+
+Ako nema jasne lokacije vrati null.
+
+4. lat / lng
+Nemoj izmisljati koordinate.
+Ako nisu eksplicitno poznate vrati null.
+
+5. Pravila razumevanja
+- Razumi lokalni sleng iz Nisa.
+- Tolerisi male greske u kucanju.
+- Prepoznaj sinonime i slicne reci.
+
+Odgovori ISKLJUCIVO validnim JSON bez objasnjenja.`,
         },
         {
           role: "user",
