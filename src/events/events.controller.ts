@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpException,
   HttpCode,
   HttpStatus,
+  Query,
   Post,
   Req,
   UseGuards,
@@ -12,6 +14,7 @@ import {
 import { DeviceAuthGuard } from "../auth/device-auth.guard";
 import { RequestWithContext } from "../common/types";
 import { CreateViberEventDto } from "./dto/create-viber-event.dto";
+import { MapEventDto } from "./dto/map-event.dto";
 import { EventsService } from "./events.service";
 
 @Controller("/api/events")
@@ -35,5 +38,21 @@ export class EventsController {
       req.authToken ?? "",
       req.requestId ?? "unknown",
     );
+  }
+
+  @Get("/map")
+  @UseGuards(DeviceAuthGuard)
+  async getMapEvents(
+    @Req() req: RequestWithContext,
+    @Query("since") since?: string,
+    @Query("eventType") eventType?: string,
+    @Query("geoOnly") geoOnly?: string,
+  ): Promise<MapEventDto[]> {
+    return this.eventsService.getMapEvents({
+      authToken: req.authToken ?? "",
+      since,
+      eventTypes: eventType,
+      geoOnly,
+    });
   }
 }

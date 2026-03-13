@@ -101,7 +101,7 @@ export class BackfillService {
       }
     }
 
-    const duration = Date.now() - startTime;
+    const duration = Math.max(Date.now() - startTime, 1);
 
     this.logger.info("backfill_completed", {
       replayed,

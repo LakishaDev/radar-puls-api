@@ -61,9 +61,9 @@ describe("ParsingService", () => {
   });
 
   describe("parseRawMessage", () => {
-    it("parses police message with location", async () => {
+    it("returns parsed + pending for readable text", async () => {
       const context: ParsingContext = {
-        rawMessage: "Policija kontrola vozača kod Delte",
+        rawMessage: "Marko kod Delte 09:12",
         receivedAt: new Date(),
         source: "viber_listener_android",
         groupName: "Radar Nis",
@@ -72,81 +72,33 @@ describe("ParsingService", () => {
 
       const result = await service.parseRawMessage(context);
 
-      expect(result.eventType).toBe("police");
-      expect(result.locationText).toBe("Delte");
       expect(result.status).toBe("parsed");
-      expect(result.confidence).toBeGreaterThan(0.5);
-    });
-
-    it("parses accident message with explicit time", async () => {
-      const context: ParsingContext = {
-        rawMessage: "Udes kod Bulevara Nemanjića u 14:30",
-        receivedAt: new Date(),
-        source: "viber_listener_android",
-        groupName: "Radar Nis",
-        deviceId: "android_listener_01",
-      };
-
-      const result = await service.parseRawMessage(context);
-
-      expect(result.eventType).toBe("accident");
-      expect(result.locationText).toBe("Bulevara Nemanjića");
-      expect(result.eventTime).not.toBeNull();
-      expect(result.eventTime?.getHours()).toBe(14);
-      expect(result.eventTime?.getMinutes()).toBe(30);
-      expect(result.status).toBe("parsed");
-    });
-
-    it("returns no_match for incomprehensible text", async () => {
-      const context: ParsingContext = {
-        rawMessage: "xyzabc random text 12345 blablabla",
-        receivedAt: new Date(),
-        source: "viber_listener_android",
-        groupName: "Radar Nis",
-        deviceId: "android_listener_01",
-      };
-
-      const result = await service.parseRawMessage(context);
-
-      expect(result.status).toBe("no_match");
       expect(result.eventType).toBe("unknown");
-      expect(result.confidence).toBeLessThanOrEqual(0.5);
-    });
-
-    it("extracts location from 'kod' keyword", async () => {
-      const context: ParsingContext = {
-        rawMessage: "Zastoj kod Merkurijane",
-        receivedAt: new Date(),
-        source: "viber_listener_android",
-        groupName: "Radar Nis",
-        deviceId: "android_listener_01",
-      };
-
-      const result = await service.parseRawMessage(context);
-
-      expect(result.locationText).toBe("Merkurijane");
-    });
-
-    it("handles message without location", async () => {
-      const context: ParsingContext = {
-        rawMessage: "Policija",
-        receivedAt: new Date(),
-        source: "viber_listener_android",
-        groupName: "Radar Nis",
-        deviceId: "android_listener_01",
-      };
-
-      const result = await service.parseRawMessage(context);
-
-      expect(result.eventType).toBe("police");
       expect(result.locationText).toBeNull();
-      expect(result.confidence).toBeLessThan(0.5);
+      expect(result.senderName).toBeNull();
+      expect(result.enrichStatus).toBe("pending");
+      expect(result.confidence).toBe(0);
+    });
+
+    it("returns no_match for unreadable short text", async () => {
+      const context: ParsingContext = {
+        rawMessage: "9:",
+        receivedAt: new Date(),
+        source: "viber_listener_android",
+        groupName: "Radar Nis",
+        deviceId: "android_listener_01",
+      };
+
+      const result = await service.parseRawMessage(context);
+
       expect(result.status).toBe("no_match");
+      expect(result.enrichStatus).toBeNull();
+      expect(result.eventTime).toBeNull();
     });
 
-    it("parses radar message", async () => {
+    it("returns no_match for noisy text with low letter ratio", async () => {
       const context: ParsingContext = {
-        rawMessage: "Foto radar na Bulbulskoj cesti",
+        rawMessage: "12:34 !!! @@@",
         receivedAt: new Date(),
         source: "viber_listener_android",
         groupName: "Radar Nis",
@@ -155,69 +107,53 @@ describe("ParsingService", () => {
 
       const result = await service.parseRawMessage(context);
 
-      expect(result.eventType).toBe("radar");
-      expect(result.locationText).toBe("Bulbulskoj cesti");
-      expect(result.status).toBe("parsed");
-      expect(result.confidence).toBeGreaterThan(0.5);
+      expect(result.status).toBe("no_match");
+      expect(result.enrichStatus).toBeNull();
+      expect(result.eventType).toBe("unknown");
     });
 
-    it("parses traffic jam message", async () => {
-      const context: ParsingContext = {
-        rawMessage: "Velika gužva na Bulevaru Despota Stefana, sve sporо",
+    it("extracts HH:MM time with leading zero", async () => {
+      const result = await service.parseRawMessage({
+        rawMessage: "Mika kod Granda 09:12",
         receivedAt: new Date(),
         source: "viber_listener_android",
         groupName: "Radar Nis",
         deviceId: "android_listener_01",
-      };
+      });
 
-      const result = await service.parseRawMessage(context);
-
-      expect(result.eventType).toBe("traffic_jam");
-      expect(result.locationText).toBe("Bulevaru Despota Stefana");
       expect(result.status).toBe("parsed");
+      expect(result.eventTime).not.toBeNull();
+      expect(result.eventTime?.getHours()).toBe(9);
+      expect(result.eventTime?.getMinutes()).toBe(12);
     });
 
-    it("handles message with multiple signals", async () => {
-      const context: ParsingContext = {
-        rawMessage: "Udes kod Fruškogorske ulice u 13:15",
+    it("extracts HH:MM time without leading zero", async () => {
+      const result = await service.parseRawMessage({
+        rawMessage: "Mika kod Granda 7:05",
         receivedAt: new Date(),
         source: "viber_listener_android",
         groupName: "Radar Nis",
         deviceId: "android_listener_01",
-      };
+      });
 
-      const result = await service.parseRawMessage(context);
-
-      expect(result.eventType).toBe("accident");
-      expect(result.locationText).toBe("Fruškogorske ulice");
-      expect(result.eventTime?.getHours()).toBe(13);
-      expect(result.confidence).toBeGreaterThan(CONFIDENCE_THRESHOLD_WITH_MULTIPLE_SIGNALS);
       expect(result.status).toBe("parsed");
+      expect(result.eventTime).not.toBeNull();
+      expect(result.eventTime?.getHours()).toBe(7);
+      expect(result.eventTime?.getMinutes()).toBe(5);
     });
 
-    it("maintains confidence between 0 and 1", async () => {
-      const contexts: ParsingContext[] = [
-        {
-          rawMessage: "Policija, udes, gužva rad",
-          receivedAt: new Date(),
-          source: "viber_listener_android",
-          groupName: "Radar Nis",
-          deviceId: "android_listener_01",
-        },
-        {
-          rawMessage: "xyzabc",
-          receivedAt: new Date(),
-          source: "viber_listener_android",
-          groupName: "Radar Nis",
-          deviceId: "android_listener_01",
-        },
-      ];
+    it("returns parsed with null time when HH:MM is missing", async () => {
+      const result = await service.parseRawMessage({
+        rawMessage: "Mika kod Granda bez vremena",
+        receivedAt: new Date(),
+        source: "viber_listener_android",
+        groupName: "Radar Nis",
+        deviceId: "android_listener_01",
+      });
 
-      for (const context of contexts) {
-        const result = await service.parseRawMessage(context);
-        expect(result.confidence).toBeGreaterThanOrEqual(0);
-        expect(result.confidence).toBeLessThanOrEqual(1);
-      }
+      expect(result.status).toBe("parsed");
+      expect(result.eventTime).toBeNull();
+      expect(result.enrichStatus).toBe("pending");
     });
   });
 
@@ -225,22 +161,27 @@ describe("ParsingService", () => {
     it("inserts new parsed event", async () => {
       const parseResult: ParsingResult = {
         status: "parsed",
-        eventType: "police",
-        locationText: "Delta",
-        description: "Police in Delta",
+        eventType: "unknown",
+        locationText: null,
+        senderName: null,
+        description: null,
         eventTime: null,
-        confidence: 0.7,
+        confidence: 0,
+        enrichStatus: "pending",
       };
 
       const mockEntity = {
         id: "parsed-uuid-1",
         rawEventId: "raw-uuid-1",
         parseStatus: "parsed",
-        eventType: "police",
-        locationText: "Delta",
-        description: "Police in Delta",
+        eventType: "unknown",
+        locationText: null,
+        senderName: null,
+        description: null,
         eventTime: null,
-        confidence: 0.7,
+        confidence: 0,
+        enrichStatus: "pending",
+        enrichedAt: null,
         parserVersion: "v1.0",
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -255,7 +196,8 @@ describe("ParsingService", () => {
       expect(result.id).toBe("parsed-uuid-1");
       expect(result.rawEventId).toBe("raw-uuid-1");
       expect(result.parseStatus).toBe("parsed");
-      expect(result.eventType).toBe("police");
+      expect(result.eventType).toBe("unknown");
+      expect(result.enrichStatus).toBe("pending");
       expect(parsedEventsRepositoryMock.create).toHaveBeenCalled();
       expect(parsedEventsRepositoryMock.save).toHaveBeenCalled();
     });
@@ -263,11 +205,13 @@ describe("ParsingService", () => {
     it("updates existing parsed event (upsert)", async () => {
       const parseResult: ParsingResult = {
         status: "parsed",
-        eventType: "accident",
-        locationText: "New Location",
-        description: "Updated description",
+        eventType: "unknown",
+        locationText: null,
+        senderName: null,
+        description: null,
         eventTime: null,
-        confidence: 0.85,
+        confidence: 0,
+        enrichStatus: "pending",
       };
 
       const existingEntity = {
@@ -280,11 +224,14 @@ describe("ParsingService", () => {
         id: "parsed-uuid-1",
         rawEventId: "raw-uuid-1",
         parseStatus: "parsed",
-        eventType: "accident",
-        locationText: "New Location",
-        description: "Updated description",
+        eventType: "unknown",
+        locationText: null,
+        senderName: null,
+        description: null,
         eventTime: null,
-        confidence: 0.85,
+        confidence: 0,
+        enrichStatus: "pending",
+        enrichedAt: null,
         parserVersion: "v1.0",
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -299,10 +246,8 @@ describe("ParsingService", () => {
 
       expect(result.id).toBe("parsed-uuid-1");
       expect(result.parseStatus).toBe("parsed");
+      expect(result.enrichStatus).toBe("pending");
       expect(parsedEventsRepositoryMock.update).toHaveBeenCalled();
     });
   });
 });
-
-// Test constant
-const CONFIDENCE_THRESHOLD_WITH_MULTIPLE_SIGNALS = 0.5;

@@ -4,6 +4,7 @@ import { AuthModule } from "./auth/auth.module";
 import { RequestIdMiddleware } from "./common/request-id.middleware";
 import { validateEnv } from "./config/env.validation";
 import { DatabaseModule } from "./database/database.module";
+import { EnrichmentModule } from "./enrichment/enrichment.module";
 import { EventsModule } from "./events/events.module";
 import { HealthModule } from "./health/health.module";
 import { ProcessingModule } from "./processing/processing.module";
@@ -19,6 +20,7 @@ import { ProcessingModule } from "./processing/processing.module";
     HealthModule,
     EventsModule,
     ProcessingModule,
+    EnrichmentModule,
   ],
 })
 export class AppModule implements NestModule {

@@ -110,15 +110,20 @@ describe("BackfillService (e2e)", () => {
     const mockParseResults = [
       {
         status: "parsed",
-        eventType: "police",
-        locationText: "Bulevara Nemanjića",
-        confidence: 0.8,
+        eventType: "unknown",
+        locationText: null,
+        senderName: null,
+        confidence: 0,
+        enrichStatus: "pending",
       },
       {
         status: "parsed",
-        eventType: "accident",
+        eventType: "unknown",
+        locationText: null,
+        senderName: null,
         eventTime: new Date("2026-03-12T15:30:00Z"),
-        confidence: 0.75,
+        confidence: 0,
+        enrichStatus: "pending",
       },
     ];
 
@@ -200,8 +205,11 @@ describe("BackfillService (e2e)", () => {
 
     const mockParseResult = {
       status: "parsed",
-      eventType: "radar",
-      confidence: 0.7,
+      eventType: "unknown",
+      locationText: null,
+      senderName: null,
+      confidence: 0,
+      enrichStatus: "pending",
     };
 
     (parsingService.parseRawMessage as jest.Mock).mockResolvedValue(mockParseResult);

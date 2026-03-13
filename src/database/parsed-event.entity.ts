@@ -14,6 +14,7 @@ import { RawEventEntity } from "./raw-event.entity";
 @Index("idx_parsed_events_parse_status", ["parseStatus"])
 @Index("idx_parsed_events_event_type", ["eventType"])
 @Index("idx_parsed_events_created_at", ["createdAt"])
+@Index("idx_parsed_events_enrich_status_created_at", ["enrichStatus", "createdAt"])
 export class ParsedEventEntity {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
@@ -34,6 +35,9 @@ export class ParsedEventEntity {
   @Column({ type: "text", name: "location_text", nullable: true })
   locationText!: string | null;
 
+  @Column({ type: "text", name: "sender_name", nullable: true })
+  senderName!: string | null;
+
   @Column({ type: "text", name: "description", nullable: true })
   description!: string | null;
 
@@ -42,6 +46,21 @@ export class ParsedEventEntity {
 
   @Column({ type: "numeric", name: "confidence", precision: 3, scale: 2 })
   confidence!: number;
+
+  @Column({ type: "text", name: "enrich_status", nullable: true })
+  enrichStatus!: string | null;
+
+  @Column({ type: "timestamptz", name: "enriched_at", nullable: true })
+  enrichedAt!: Date | null;
+
+  @Column({ type: "double precision", name: "latitude", nullable: true })
+  latitude!: number | null;
+
+  @Column({ type: "double precision", name: "longitude", nullable: true })
+  longitude!: number | null;
+
+  @Column({ type: "text", name: "geo_source", nullable: true })
+  geoSource!: "fallback" | "nominatim" | null;
 
   @Column({ type: "text", name: "parser_version" })
   parserVersion!: string;

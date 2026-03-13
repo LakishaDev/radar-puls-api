@@ -72,21 +72,26 @@ describe("Processing (e2e)", () => {
     // Default mock return value for parser
     parsingServiceMock.parseRawMessage.mockResolvedValue({
       status: "parsed",
-      eventType: "police",
-      locationText: "Test Location",
-      description: "Test Description",
+      eventType: "unknown",
+      locationText: null,
+      senderName: null,
+      description: null,
       eventTime: null,
-      confidence: 0.8,
+      confidence: 0,
+      enrichStatus: "pending",
     } as ParsingResult);
     parsingServiceMock.persistParsed.mockResolvedValue({
       id: "parsed-uuid",
       rawEventId: "event-uuid",
       parseStatus: "parsed",
-      eventType: "police",
-      locationText: "Test Location",
-      description: "Test Description",
+      eventType: "unknown",
+      locationText: null,
+      senderName: null,
+      description: null,
       eventTime: null,
-      confidence: 0.8,
+      confidence: 0,
+      enrichStatus: "pending",
+      enrichedAt: null,
       parserVersion: "v1.0",
     });
 

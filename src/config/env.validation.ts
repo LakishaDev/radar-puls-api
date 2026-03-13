@@ -19,6 +19,13 @@ class EnvironmentVariables {
   @IsString()
   DEVICE_TOKENS_JSON!: string;
 
+  @IsString()
+  OPENAI_API_KEY!: string;
+
+  @IsOptional()
+  @IsString()
+  OPENAI_MODEL?: string;
+
   @IsOptional()
   @IsString()
   NODE_ENV?: string;
@@ -66,6 +73,23 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   BACKFILL_TRIGGER_TOKEN?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ENRICHMENT_POLL_INTERVAL_MS?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ENRICHMENT_BATCH_SIZE?: number;
+
+  @IsString()
+  NOMINATIM_USER_AGENT!: string;
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  GEO_ENABLED?: string;
 }
 
 export function validateEnv(

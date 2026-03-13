@@ -17,4 +17,11 @@ export class DeviceTokenService {
       throw new UnauthorizedException();
     }
   }
+
+  assertTokenAuthorized(bearerToken: string): void {
+    const knownTokens = Object.values(this.tokenMap);
+    if (!knownTokens.includes(bearerToken)) {
+      throw new UnauthorizedException();
+    }
+  }
 }

@@ -5,15 +5,12 @@ import { Repository } from "typeorm";
 import { AppLogger } from "../common/app.logger";
 import { ParsedEventEntity } from "../database/parsed-event.entity";
 import {
-  CONFIDENCE_THRESHOLDS,
-  EVENT_TYPE_KEYWORDS,
+  EnrichStatus,
   EventType,
-  LOCATION_KEYWORDS,
   ParsedEvent,
   ParsingContext,
   ParsingResult,
   ParseStatus,
-  TIME_PATTERNS,
 } from "./types";
 
 @Injectable()
@@ -33,50 +30,33 @@ export class ParsingService {
   }
 
   /**
-   * Main entry point — parse raw message and return result
+   * Main entry point — minimal rule phase (readable check + HH:MM extraction)
    */
   async parseRawMessage(context: ParsingContext): Promise<ParsingResult> {
-    const normalized = this.normalizeText(context.rawMessage);
-    const original = context.rawMessage; // Keep original for case preservation
-
-    const eventType = this.extractEventType(normalized);
-    const locationText = this.extractLocation(normalized, original);
-    const eventTime = this.extractTime(normalized);
-
-    // Calculate confidence based on detected signals
-    const signals = {
-      eventTypeMatch: eventType !== "unknown" ? eventType : undefined,
-      locationMatch: locationText ? "location_found" : undefined,
-      timeExpressions: eventTime ? ["time_found"] : undefined,
-      confidenceFactors: [] as string[],
-    };
-
-    const confidence = this.calculateConfidence(eventType, locationText, eventTime, signals);
-
-    const parseStatus: ParseStatus =
-      confidence >= CONFIDENCE_THRESHOLDS.MIN_FOR_PARSED ? "parsed" : "no_match";
+    const parseStatus: ParseStatus = this.isReadableText(context.rawMessage)
+      ? "parsed"
+      : "no_match";
+    const eventTime = parseStatus === "parsed" ? this.extractTime(context.rawMessage) : null;
+    const enrichStatus: EnrichStatus | null = parseStatus === "parsed" ? "pending" : null;
 
     const result: ParsingResult = {
       status: parseStatus,
-      eventType: eventType, // Always return detected type, even if no_match
-      locationText,
-      description: this.generateDescription(
-        context.rawMessage,
-        eventType,
-        locationText,
-        eventTime,
-      ),
+      eventType: "unknown",
+      locationText: null,
+      senderName: null,
+      description: null,
       eventTime,
-      confidence,
-      signals,
+      confidence: 0,
+      enrichStatus,
     };
 
     this.logger.info("parse_result", {
       status: parseStatus,
-      event_type: eventType,
-      confidence,
-      has_location: Boolean(locationText),
+      event_type: result.eventType,
+      confidence: result.confidence,
+      has_location: Boolean(result.locationText),
       has_time: Boolean(eventTime),
+      enrich_status: enrichStatus,
       device_id: context.deviceId,
       source: context.source,
       group_name: context.groupName,
@@ -86,179 +66,38 @@ export class ParsingService {
   }
 
   /**
-   * Normalize text — lowercase, trim, remove extra spaces
+   * Message readability filter for noisy/non-text inputs.
    */
-  private normalizeText(raw: string): string {
-    return raw
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, " ");
-  }
-
-  /**
-   * Detect event type based on keywords
-   */
-  private extractEventType(normalized: string): EventType {
-    const eventTypes: EventType[] = [
-      "police",
-      "accident",
-      "traffic_jam",
-      "radar",
-      "control",
-    ];
-
-    for (const eventType of eventTypes) {
-      const keywords = EVENT_TYPE_KEYWORDS[eventType];
-      for (const keyword of keywords) {
-        if (normalized.includes(keyword.toLowerCase())) {
-          return eventType;
-        }
-      }
+  private isReadableText(raw: string): boolean {
+    const trimmed = raw.trim();
+    if (trimmed.length < 3) {
+      return false;
     }
 
-    return "unknown";
-  }
-
-  /**
-   * Extract location — look for keywords like "kod", "na", "blizu"
-   * Uses normalized for searching, original for case preservation
-   */
-  private extractLocation(normalized: string, original: string): string | null {
-    for (const keyword of LOCATION_KEYWORDS) {
-      const keywordPattern = ` ${keyword} `;
-      const idx = normalized.indexOf(keywordPattern);
-
-      if (idx !== -1) {
-        // Extract text after keyword from ORIGINAL for case preservation
-        const originalAfterKeyword = original.substring(
-          idx + keywordPattern.length,
-        );
-
-        // Find end in NORMALIZED version
-        const normalizedAfterKeyword = normalized.substring(
-          idx + keywordPattern.length,
-        );
-        let endIdx = normalizedAfterKeyword.length;
-
-        // Look for " u 13:15" pattern (time)
-        const timeMatch = normalizedAfterKeyword.match(/\s+u\s+\d{1,2}:\d{2}/i);
-        if (timeMatch) {
-          endIdx = timeMatch.index ?? normalizedAfterKeyword.length;
-        } else {
-          // Look for punctuation
-          const punctMatch = normalizedAfterKeyword.match(/[,!?.]/);
-          if (punctMatch) {
-            endIdx = punctMatch.index ?? normalizedAfterKeyword.length;
-          }
-        }
-
-        // Extract from ORIGINAL, trim, and capitalize first letter
-        const locationRaw = originalAfterKeyword.substring(0, endIdx).trim();
-        if (locationRaw.length > 0) {
-          // Better capitalization: capitalize first letter, keep rest as original
-          return locationRaw.charAt(0).toUpperCase() + locationRaw.slice(1);
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Extract time if mentioned explicitly
-   */
-  private extractTime(normalized: string): Date | null {
-    for (const pattern of TIME_PATTERNS) {
-      const match = normalized.match(pattern);
-      if (match) {
-        const hour = parseInt(match[1], 10);
-        const minute = match[2] ? parseInt(match[2], 10) : 0;
-
-        if (hour >= 0 && hour < 24 && minute >= 0 && minute < 60) {
-          const now = new Date();
-          return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Calculate confidence score [0..1]
-   * Based on number and type of detected signals
-   */
-  private calculateConfidence(
-    eventType: EventType,
-    locationText: string | null,
-    eventTime: Date | null,
-    signals: any,
-  ): number {
-    let confidence = 0;
-
-    // Event type keyword match
-    if (eventType !== "unknown") {
-      confidence += CONFIDENCE_THRESHOLDS.EVENT_TYPE_KEYWORD;
-      signals.confidenceFactors.push("event_type_detected");
-    }
-
-    // Location keyword match
-    if (locationText) {
-      confidence += CONFIDENCE_THRESHOLDS.LOCATION_KEYWORD;
-      signals.confidenceFactors.push("location_detected");
-    }
-
-    // Time expression detected
-    if (eventTime) {
-      confidence += CONFIDENCE_THRESHOLDS.TIME_EXPRESSION;
-      signals.confidenceFactors.push("time_detected");
-    }
-
-    // Multiple signals hit bonus
-    const signalCount = [eventType !== "unknown" ? 1 : 0, locationText ? 1 : 0, eventTime ? 1 : 0].filter(
-      (x) => x,
+    const letterOrSpaceCount = Array.from(trimmed).filter((char) =>
+      /\p{L}|\s/u.test(char),
     ).length;
-    if (signalCount >= 2) {
-      confidence += CONFIDENCE_THRESHOLDS.MULTIPLE_SIGNALS;
-      signals.confidenceFactors.push("multiple_signals");
-    }
 
-    // Cap confidence at 1.0
-    return Math.min(confidence, 1.0);
+    return letterOrSpaceCount / trimmed.length >= 0.5;
   }
 
   /**
-   * Generate human-readable description from parsed components
+   * Extract first explicit HH:MM occurrence.
    */
-  private generateDescription(
-    rawMessage: string,
-    eventType: EventType,
-    locationText: string | null,
-    eventTime: Date | null,
-  ): string {
-    const parts: string[] = [];
-
-    if (eventType !== "unknown") {
-      parts.push(`[${eventType}]`);
+  private extractTime(rawMessage: string): Date | null {
+    const match = rawMessage.match(/\b(\d{1,2}):(\d{2})\b/u);
+    if (!match) {
+      return null;
     }
 
-    if (locationText) {
-      parts.push(locationText);
+    const hour = parseInt(match[1], 10);
+    const minute = parseInt(match[2], 10);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return null;
     }
 
-    if (eventTime) {
-      const time = `${eventTime.getHours().toString().padStart(2, "0")}:${eventTime
-        .getMinutes()
-        .toString()
-        .padStart(2, "0")}`;
-      parts.push(`at ${time}`);
-    }
-
-    if (parts.length === 0) {
-      return rawMessage.substring(0, 200);
-    }
-
-    return parts.join(" — ");
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
   }
 
   /**
@@ -277,9 +116,12 @@ export class ParsingService {
         parseStatus: result.status,
         eventType: result.eventType,
         locationText: result.locationText,
+        senderName: result.senderName,
         description: result.description,
         eventTime: result.eventTime,
         confidence: result.confidence,
+        enrichStatus: result.enrichStatus,
+        enrichedAt: null,
         parserVersion: this.parserVersion,
         updatedAt: new Date(),
       });
@@ -294,9 +136,12 @@ export class ParsingService {
         parseStatus: result.status,
         eventType: result.eventType,
         locationText: result.locationText,
+        senderName: result.senderName,
         description: result.description,
         eventTime: result.eventTime,
         confidence: result.confidence,
+        enrichStatus: result.enrichStatus,
+        enrichedAt: null,
         parserVersion: this.parserVersion,
       });
 
@@ -309,9 +154,12 @@ export class ParsingService {
       parseStatus: entity.parseStatus as ParseStatus,
       eventType: entity.eventType as EventType,
       locationText: entity.locationText,
+      senderName: entity.senderName,
       description: entity.description,
       eventTime: entity.eventTime,
       confidence: entity.confidence,
+      enrichStatus: entity.enrichStatus as EnrichStatus | null,
+      enrichedAt: entity.enrichedAt,
       parserVersion: entity.parserVersion,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,

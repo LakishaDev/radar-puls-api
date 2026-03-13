@@ -3,10 +3,13 @@ services:
     image: postgres:16-alpine
     container_name: radar_puls_db
     restart: unless-stopped
+    command: ["postgres", "-c", "timezone=Europe/Belgrade"]
     environment:
       POSTGRES_DB: radar_puls
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      TZ: Europe/Belgrade
+      PGTZ: Europe/Belgrade
     ports:
       - "5432:5432"
     volumes:
@@ -27,7 +30,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -37,10 +40,16 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://postgres:postgres@db:5432/radar_puls
       DEVICE_TOKENS_JSON: '{"android_listener_01":"dev-token-01"}'
+      OPENAI_API_KEY: "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"
+      OPENAI_MODEL: "gpt-4o-mini"
+      NOMINATIM_USER_AGENT: "radar-puls-api/1.0 (contact: dev@radarpuls.local)"
+      GEO_ENABLED: "true"
       WORKER_BATCH_SIZE: 100
       WORKER_POLL_INTERVAL_MS: 5000
       WORKER_LEASE_TIMEOUT_MS: 300000
       WORKER_MAX_RETRIES: 3
+      ENRICHMENT_POLL_INTERVAL_MS: 10000
+      ENRICHMENT_BATCH_SIZE: 10
       ENABLE_DEV_PROCESSING_TRIGGER: "true"
       PROCESSING_DEV_TRIGGER_TOKEN: "dev-processing-trigger-token"
       PARSER_VERSION: "v1.0"
@@ -68,10 +77,16 @@ services:
       NODE_ENV: development
       DATABASE_URL: postgres://postgres:postgres@db:5432/radar_puls
       DEVICE_TOKENS_JSON: '{"android_listener_01":"dev-token-01"}'
+      OPENAI_API_KEY: "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"
+      OPENAI_MODEL: "gpt-4o-mini"
+      NOMINATIM_USER_AGENT: "radar-puls-api/1.0 (contact: dev@radarpuls.local)"
+      GEO_ENABLED: "true"
       WORKER_BATCH_SIZE: 100
       WORKER_POLL_INTERVAL_MS: 5000
       WORKER_LEASE_TIMEOUT_MS: 300000
       WORKER_MAX_RETRIES: 3
+      ENRICHMENT_POLL_INTERVAL_MS: 10000
+      ENRICHMENT_BATCH_SIZE: 10
       WORKER_INSTANCE_ID: "worker-1"
       ENABLE_DEV_PROCESSING_TRIGGER: "true"
       PROCESSING_DEV_TRIGGER_TOKEN: "dev-processing-trigger-token"
@@ -84,6 +99,41 @@ services:
       - ./:/app
       - /app/node_modules
     command: npm run start:worker:dev
+
+  enrichment:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: radar_puls_enrichment
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://postgres:postgres@db:5432/radar_puls
+      DEVICE_TOKENS_JSON: '{"android_listener_01":"dev-token-01"}'
+      OPENAI_API_KEY: "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"
+      OPENAI_MODEL: "gpt-4o-mini"
+      NOMINATIM_USER_AGENT: "radar-puls-api/1.0 (contact: dev@radarpuls.local)"
+      GEO_ENABLED: "true"
+      WORKER_BATCH_SIZE: 100
+      WORKER_POLL_INTERVAL_MS: 5000
+      WORKER_LEASE_TIMEOUT_MS: 300000
+      WORKER_MAX_RETRIES: 3
+      ENABLE_DEV_PROCESSING_TRIGGER: "true"
+      PROCESSING_DEV_TRIGGER_TOKEN: "dev-processing-trigger-token"
+      PARSER_VERSION: "v1.0"
+      ENABLE_BACKFILL: "false"
+      BACKFILL_TRIGGER_TOKEN: "dev-backfill-trigger-token"
+      ENRICHMENT_POLL_INTERVAL_MS: 10000
+      ENRICHMENT_BATCH_SIZE: 10
+      TS_NODE_DEV: "true"
+      TS_NODE_DEV_POLL: "true"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    command: npm run start:enrichment:dev
 
 volumes:
   postgres_data:

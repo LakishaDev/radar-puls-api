@@ -15,7 +15,6 @@ This repository is responsible for ingestion, worker processing, and rule-based 
 
 Out of scope for current backend milestone:
 
-- LLM-based parsing
 - geocoding
 - map/public API
 - moderation workflow
@@ -56,6 +55,8 @@ Copy `.env.example` values into your runtime environment:
 - `PORT` - API port
 - `DATABASE_URL` - PostgreSQL connection string
 - `DEVICE_TOKENS_JSON` - JSON map of `device_id -> bearer token`
+- `OPENAI_API_KEY` - OpenAI API key for enrichment stage
+- `OPENAI_MODEL` - optional model override (`gpt-4o-mini` default)
 - `WORKER_BATCH_SIZE` - max claimed records per cycle (default 100)
 - `WORKER_POLL_INTERVAL_MS` - worker polling interval (default 5000)
 - `WORKER_LEASE_TIMEOUT_MS` - reclaim timeout for stuck processing leases (default 300000)
@@ -66,6 +67,8 @@ Copy `.env.example` values into your runtime environment:
 - `PARSER_VERSION` - parser version stored in `parsed_events.parser_version`
 - `ENABLE_BACKFILL` - allow backfill service/endpoint (`true`/`false`)
 - `BACKFILL_TRIGGER_TOKEN` - bearer token for backfill endpoint
+- `ENRICHMENT_POLL_INTERVAL_MS` - enrichment poll interval (default 10000)
+- `ENRICHMENT_BATCH_SIZE` - enrichment batch size (default 10)
 
 Example:
 
@@ -73,11 +76,15 @@ Example:
 PORT=3000
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/radar_puls
 DEVICE_TOKENS_JSON={"android_listener_01":"dev-token-01"}
+OPENAI_API_KEY=dev-openai-key
+OPENAI_MODEL=gpt-4o-mini
 WORKER_BATCH_SIZE=100
 WORKER_POLL_INTERVAL_MS=5000
 WORKER_LEASE_TIMEOUT_MS=300000
 WORKER_MAX_RETRIES=3
 WORKER_INSTANCE_ID=dev-worker-1
+ENRICHMENT_POLL_INTERVAL_MS=10000
+ENRICHMENT_BATCH_SIZE=10
 ENABLE_DEV_PROCESSING_TRIGGER=true
 PROCESSING_DEV_TRIGGER_TOKEN=dev-processing-trigger-token
 PARSER_VERSION=v1.0
@@ -93,6 +100,7 @@ npm run build
 npm run migration:run
 npm run start:dev
 npm run start:worker:dev
+npm run start:enrichment:dev
 npm run start:backfill:dev
 ```
 
@@ -155,6 +163,7 @@ Default compose values:
 
 - API: `http://localhost:3000`
 - Worker: separate `worker` service (`npm run start:worker:dev`)
+- Enrichment: separate `enrichment` service (`npm run start:enrichment:dev`)
 - DB host for API container: `db`
 - DB URL: `postgres://postgres:postgres@db:5432/radar_puls`
 - Persistent DB volume: `postgres_data`
@@ -192,26 +201,40 @@ Default compose values:
 
 Parser is implemented in [src/parsing/parsing.service.ts](src/parsing/parsing.service.ts) and is integrated into worker processing flow.
 
-Rule engine behavior:
+Rule phase behavior:
 
-- detects event type using Serbian keyword matching (`police`, `accident`, `traffic_jam`, `radar`, `control`, fallback `unknown`)
-- extracts location text using location markers (`kod`, `na`, `blizu`) while preserving original case
-- extracts explicit time expressions (`HH:mm`)
-- computes deterministic confidence score in range `0..1`
-
-Confidence heuristic:
-
-- +0.50 when event type is detected
-- +0.25 when location is detected
-- +0.15 when time is detected
-- +0.10 bonus when at least two signals are detected
-- threshold: `>= 0.5` => `parsed`, otherwise `no_match`
+- checks readability (`min 3 chars` and at least `50%` unicode letters/spaces)
+- extracts explicit first time in `HH:MM` format
+- sets `event_type='unknown'`, `confidence=0`
+- sets `enrich_status='pending'` for readable messages, otherwise `enrich_status=NULL`
 
 Parse status semantics:
 
 - `parsed` means message has enough structured signal confidence
-- `no_match` means parser executed but did not find enough signal
+- `no_match` means message is unreadable and will not be sent to enrichment
 - `no_match` is still a successful worker outcome (`processing_status=processed`), not retryable failure
+
+## Enrichment (Phase 4)
+
+Enrichment runs as a separate async poller process and never blocks worker claim loop.
+
+Pipeline:
+
+- worker writes `parsed_events` with `parse_status` and `enrich_status`
+- enrichment process polls `parsed_events` where `enrich_status='pending'`
+- OpenAI (`gpt-4o-mini` by default) extracts `sender_name`, `location_text`, and optional `event_type`
+- record is updated to `enrich_status='enriched'` with `enriched_at=NOW()`
+- on AI error, record moves to `enrich_status='failed'`
+
+New DB fields in `parsed_events`:
+
+- `sender_name TEXT NULL`
+- `enrich_status TEXT NULL` (`pending|enriched|failed`)
+- `enriched_at TIMESTAMPTZ NULL`
+
+Index for poller query:
+
+- `(enrich_status, created_at)`
 
 ## Backfill Runbook
 

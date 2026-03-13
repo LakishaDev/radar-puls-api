@@ -8,6 +8,7 @@ import { NextFunction, Request, Response } from "express";
 import request from "supertest";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { GlobalHttpExceptionFilter } from "../src/common/http-exception.filter";
+import { ParsedEventEntity } from "../src/database/parsed-event.entity";
 import { RawEventEntity } from "../src/database/raw-event.entity";
 import { EventsModule } from "../src/events/events.module";
 import { DeviceTokenService } from "../src/auth/device-token.service";
@@ -20,9 +21,19 @@ describe("Viber Events (e2e)", () => {
     save: jest.fn(),
   };
 
+  const parsedRepositoryMock = {
+    query: jest.fn(),
+  };
+
   const tokenServiceMock = {
     assertAuthorized: jest.fn((deviceId: string, token: string) => {
       if (deviceId === "android_listener_01" && token === "dev-token-01") {
+        return;
+      }
+      throw new UnauthorizedException();
+    }),
+    assertTokenAuthorized: jest.fn((token: string) => {
+      if (token === "dev-token-01") {
         return;
       }
       throw new UnauthorizedException();
@@ -32,13 +43,17 @@ describe("Viber Events (e2e)", () => {
   beforeEach(async () => {
     repositoryMock.create.mockClear();
     repositoryMock.save.mockReset();
+    parsedRepositoryMock.query.mockReset();
     tokenServiceMock.assertAuthorized.mockClear();
+    tokenServiceMock.assertTokenAuthorized.mockClear();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [EventsModule],
     })
       .overrideProvider(getRepositoryToken(RawEventEntity))
       .useValue(repositoryMock)
+      .overrideProvider(getRepositoryToken(ParsedEventEntity))
+      .useValue(parsedRepositoryMock)
       .overrideProvider(DeviceTokenService)
       .useValue(tokenServiceMock)
       .compile();
