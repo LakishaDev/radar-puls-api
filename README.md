@@ -182,6 +182,42 @@ Default compose values:
 - DB URL: `postgres://postgres:postgres@db:5432/radar_puls`
 - Persistent DB volume: `postgres_data`
 
+### Production Deploy (VPS + Docker + GitHub Actions)
+
+Production deployment is based on:
+
+- `Dockerfile` (multi-stage production image)
+- `docker-compose.prod.yml` (db + api + worker + enrichment)
+- `.github/workflows/deploy.yml` (build/test/push/deploy)
+
+Repository secrets required by workflow:
+
+- `SERVER_HOST`
+- `SERVER_USER`
+- `SSH_PRIVATE_KEY`
+
+Optional secrets for private GHCR pulls on VPS:
+
+- `GHCR_USERNAME`
+- `GHCR_TOKEN`
+
+One-time server prep (example target path used by workflow):
+
+1. Clone repository into `/opt/radar-puls`.
+2. Create `/opt/radar-puls/.env` from `.env.example` and set production values.
+3. Ensure Docker + Compose plugin are installed on VPS.
+4. Ensure `docker-compose.prod.yml` exists at `/opt/radar-puls`.
+
+Manual production run commands (on VPS):
+
+```bash
+cd /opt/radar-puls
+export APP_IMAGE=ghcr.io/<owner>/<repo>:latest
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
+docker compose -f docker-compose.prod.yml exec -T api npm run migration:run
+```
+
 ### Endpoints
 
 - `GET /health`

@@ -1,0 +1,122 @@
+name: Build, Test, and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: radar_puls_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/radar_puls_test
+      DEVICE_TOKENS_JSON: '{"android_listener_01":"ci-token"}'
+      OPENAI_API_KEY: ci-openai-key
+      OPENAI_MODEL: gpt-5-mini
+      NOMINATIM_USER_AGENT: radar-puls-api-ci/1.0
+      WORKER_BATCH_SIZE: 100
+      WORKER_POLL_INTERVAL_MS: 5000
+      WORKER_LEASE_TIMEOUT_MS: 300000
+      WORKER_MAX_RETRIES: 3
+      ENRICHMENT_POLL_INTERVAL_MS: 10000
+      ENRICHMENT_BATCH_SIZE: 10
+      ENRICHMENT_MAX_ATTEMPTS: 3
+      ENRICHMENT_RETRY_COOLDOWN_MS: 60000
+      GEO_ENABLED: "true"
+      ENABLE_DEV_PROCESSING_TRIGGER: "false"
+      PROCESSING_DEV_TRIGGER_TOKEN: ci-processing-trigger-token
+      PARSER_VERSION: v1.0
+      ENABLE_BACKFILL: "false"
+      BACKFILL_TRIGGER_TOKEN: ci-backfill-token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare image metadata
+        id: meta
+        run: echo "image_repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.image_repo }}:latest
+            ghcr.io/${{ steps.meta.outputs.image_repo }}:${{ github.sha }}
+
+      - name: Deploy on VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE_REPO: ${{ steps.meta.outputs.image_repo }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: IMAGE_REPO,GHCR_USERNAME,GHCR_TOKEN
+          script: |
+            set -e
+            cd /opt/radar-puls
+
+            if [ -n "$GHCR_USERNAME" ] && [ -n "$GHCR_TOKEN" ]; then
+              echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+            fi
+
+            export APP_IMAGE="ghcr.io/${IMAGE_REPO}:latest"
+
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml exec -T api npm run migration:run

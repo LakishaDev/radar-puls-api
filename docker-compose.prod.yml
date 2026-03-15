@@ -1,0 +1,124 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command: ["postgres", "-c", "timezone=Europe/Belgrade"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-radar_puls}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      TZ: ${TZ:-Europe/Belgrade}
+      PGTZ: ${PGTZ:-Europe/Belgrade}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-radar_puls}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ${APP_IMAGE:-ghcr.io/owner/repo:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/radar_puls}
+      DEVICE_TOKENS_JSON: ${DEVICE_TOKENS_JSON}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+      NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT}
+      GEO_ENABLED: ${GEO_ENABLED:-true}
+      WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-100}
+      WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-5000}
+      WORKER_LEASE_TIMEOUT_MS: ${WORKER_LEASE_TIMEOUT_MS:-300000}
+      WORKER_MAX_RETRIES: ${WORKER_MAX_RETRIES:-3}
+      ENRICHMENT_POLL_INTERVAL_MS: ${ENRICHMENT_POLL_INTERVAL_MS:-10000}
+      ENRICHMENT_BATCH_SIZE: ${ENRICHMENT_BATCH_SIZE:-10}
+      ENRICHMENT_MAX_ATTEMPTS: ${ENRICHMENT_MAX_ATTEMPTS:-3}
+      ENRICHMENT_RETRY_COOLDOWN_MS: ${ENRICHMENT_RETRY_COOLDOWN_MS:-60000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      WORKER_INSTANCE_ID: ${WORKER_INSTANCE_ID:-worker-1}
+      ENABLE_DEV_PROCESSING_TRIGGER: ${ENABLE_DEV_PROCESSING_TRIGGER:-false}
+      PROCESSING_DEV_TRIGGER_TOKEN: ${PROCESSING_DEV_TRIGGER_TOKEN:-}
+      PARSER_VERSION: ${PARSER_VERSION:-v1.0}
+      ENABLE_BACKFILL: ${ENABLE_BACKFILL:-false}
+      BACKFILL_TRIGGER_TOKEN: ${BACKFILL_TRIGGER_TOKEN:-}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  worker:
+    image: ${APP_IMAGE:-ghcr.io/owner/repo:latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["npm", "run", "start:worker"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/radar_puls}
+      DEVICE_TOKENS_JSON: ${DEVICE_TOKENS_JSON}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+      NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT}
+      GEO_ENABLED: ${GEO_ENABLED:-true}
+      WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-100}
+      WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-5000}
+      WORKER_LEASE_TIMEOUT_MS: ${WORKER_LEASE_TIMEOUT_MS:-300000}
+      WORKER_MAX_RETRIES: ${WORKER_MAX_RETRIES:-3}
+      ENRICHMENT_POLL_INTERVAL_MS: ${ENRICHMENT_POLL_INTERVAL_MS:-10000}
+      ENRICHMENT_BATCH_SIZE: ${ENRICHMENT_BATCH_SIZE:-10}
+      ENRICHMENT_MAX_ATTEMPTS: ${ENRICHMENT_MAX_ATTEMPTS:-3}
+      ENRICHMENT_RETRY_COOLDOWN_MS: ${ENRICHMENT_RETRY_COOLDOWN_MS:-60000}
+      WORKER_INSTANCE_ID: ${WORKER_INSTANCE_ID:-worker-1}
+      ENABLE_DEV_PROCESSING_TRIGGER: ${ENABLE_DEV_PROCESSING_TRIGGER:-false}
+      PROCESSING_DEV_TRIGGER_TOKEN: ${PROCESSING_DEV_TRIGGER_TOKEN:-}
+      PARSER_VERSION: ${PARSER_VERSION:-v1.0}
+      ENABLE_BACKFILL: ${ENABLE_BACKFILL:-false}
+      BACKFILL_TRIGGER_TOKEN: ${BACKFILL_TRIGGER_TOKEN:-}
+
+  enrichment:
+    image: ${APP_IMAGE:-ghcr.io/owner/repo:latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    command: ["npm", "run", "start:enrichment"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/radar_puls}
+      DEVICE_TOKENS_JSON: ${DEVICE_TOKENS_JSON}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5-mini}
+      NOMINATIM_USER_AGENT: ${NOMINATIM_USER_AGENT}
+      GEO_ENABLED: ${GEO_ENABLED:-true}
+      WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-100}
+      WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-5000}
+      WORKER_LEASE_TIMEOUT_MS: ${WORKER_LEASE_TIMEOUT_MS:-300000}
+      WORKER_MAX_RETRIES: ${WORKER_MAX_RETRIES:-3}
+      ENRICHMENT_POLL_INTERVAL_MS: ${ENRICHMENT_POLL_INTERVAL_MS:-10000}
+      ENRICHMENT_BATCH_SIZE: ${ENRICHMENT_BATCH_SIZE:-10}
+      ENRICHMENT_MAX_ATTEMPTS: ${ENRICHMENT_MAX_ATTEMPTS:-3}
+      ENRICHMENT_RETRY_COOLDOWN_MS: ${ENRICHMENT_RETRY_COOLDOWN_MS:-60000}
+      ENABLE_DEV_PROCESSING_TRIGGER: ${ENABLE_DEV_PROCESSING_TRIGGER:-false}
+      PROCESSING_DEV_TRIGGER_TOKEN: ${PROCESSING_DEV_TRIGGER_TOKEN:-}
+      PARSER_VERSION: ${PARSER_VERSION:-v1.0}
+      ENABLE_BACKFILL: ${ENABLE_BACKFILL:-false}
+      BACKFILL_TRIGGER_TOKEN: ${BACKFILL_TRIGGER_TOKEN:-}
+
+volumes:
+  postgres_data:
