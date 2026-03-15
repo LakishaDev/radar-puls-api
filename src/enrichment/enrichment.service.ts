@@ -288,101 +288,63 @@ export class EnrichmentService implements OnModuleDestroy {
       messages: [
         {
           role: "system",
-          content: `Analiziraj kratke Viber poruke o saobracaju u Nisu.
+          content: `Analiziraj kratke Viber poruke o saobraćaju u Nišu.
 
-Vrati JSON u formatu:
+Vrati JSON:
+
 {
   "senderName": string|null,
   "locationText": string|null,
   "eventType": "police"|"accident"|"traffic_jam"|"radar"|"control"|"unknown",
-  "lat": number|null,
-  "lng": number|null
+  "confidence": number
 }
 
 PRAVILA
 
-1. senderName
-- Licno ime samo ako se nalazi na samom pocetku poruke.
+senderName
+- Lično ime samo ako je na početku poruke.
 - Primer: "Marko radar kod delte".
-- Imena ulica, objekata ili mesta nisu imena.
-- Ako nema imena vrati null.
+- Ako nema imena → null.
 
-2. eventType
-Prepoznaj dogadjaj iz poruke:
+eventType
 
-control
-- duvaljka
-- alkotest
-- puse
-- zaustavljaju
-- kontrola
-
-police
-- murija
-- policija
-- mup
-- saobracajci
-- patrola
-
-radar
-- radar
-- laser
-- merenje
-- brzina
-
-traffic_jam
-- guzva
-- kolona
-- stoji
-- kolaps
-
-accident
-- sudar
-- udes
-- cukanje
-- pao
-- oboren
+control → duvaljka, alkotest, puse, zaustavljaju, kontrola  
+police → murija, policija, mup, saobraćajci, patrola  
+radar → radar, laser, merenje, brzina  
+traffic_jam → guzva, kolona, stoji, kolaps  
+accident → sudar, udes, cukanje, pao, oboren  
 
 Ako nije jasno → "unknown".
 
-3. locationText
-Pretvori lokalni naziv mesta u naziv pogodan za Google Maps geocoding.
+locationText
+Iz poruke izdvoji naziv mesta ili ulice za Google geocoding.
 
-Vrati SAMO naziv ulice ili mesta, BEZ grada (ne dodavaj ", Nis").
+Pravila:
+- Vrati samo naziv lokacije.
+- Ne dodavati grad.
+- Ukloni reči: kod, preko puta, ispred, iza, posle.
 
-Format mora biti:
-"<naziv mesta>"
+Primeri:
+kod disa → DIS
+kod delte → Delta Planet
+kod stop shopa → Stop Shop
+kod elektronskog → Elektronska industrija
+bulevar nemanjica → Bulevar Nemanjica
+knjazevacka → Knjazevacka
+kod niteksa → Niteks
+vojvode putnika → Vojvode Putnika
 
-Ukloni reci:
-kod
-preko puta
-ispred
-iza
-posle
+Ako nema jasne lokacije → null.
 
-Primeri normalizacije:
+confidence
+Broj 0–1 koji označava sigurnost ekstrakcije.
 
-"kod disa" → "DIS"
-"kod stop shopa" → "Stop Shop"
-"kod delte" → "Delta Planet"
-"kod elektronskog" → "Elektronska industrija"
-"bulevar nemanjica" → "Bulevar Nemanjica"
-"knjazevacka" → "Knjazevacka"
-"kod niteksa" → "Niteks"
-"vojvode putnika" → "Vojvode Putnika"
+0.9–1.0 → jasno  
+0.6–0.8 → verovatno  
+0.3–0.5 → nesigurno  
+<0.3 → vrlo nesigurno
 
-Ako nema jasne lokacije vrati null.
-
-4. lat / lng
-Nemoj izmisljati koordinate.
-Ako nisu eksplicitno poznate vrati null.
-
-5. Pravila razumevanja
-- Razumi lokalni sleng iz Nisa.
-- Tolerisi male greske u kucanju.
-- Prepoznaj sinonime i slicne reci.
-
-Odgovori ISKLJUCIVO validnim JSON bez objasnjenja.`,
+Odgovori samo validnim JSON.`,
         },
         {
           role: "user",
