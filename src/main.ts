@@ -35,7 +35,7 @@ async function bootstrap(): Promise<void> {
 
   const realtimePublisher = app.get(RealtimePublisher);
   const io = new Server(app.getHttpServer(), {
-    path: "/ws",
+    path: "/ws/map",
     cors: {
       origin: allowedOrigins.length > 0 ? allowedOrigins : "*",
     },
