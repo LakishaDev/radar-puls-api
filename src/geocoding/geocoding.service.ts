@@ -84,6 +84,7 @@ const LOCAL_FALLBACK_ENTRIES: FallbackEntry[] = [
   { phrases: ["beogradski put", "beogradska"], lat: 43.338, lng: 21.888 },
   { phrases: ["brzi put", "obilaznica", "obilaznca"], lat: 43.3, lng: 21.87 },
   { phrases: ["zeleni venac"], lat: 43.3225, lng: 21.899 },
+  { phrases: ["knjazevacka", "niteks"], lat: 43.3225, lng: 21.8988 },
 ];
 
 const FLAT_FALLBACKS: FlatFallback[] = LOCAL_FALLBACK_ENTRIES.flatMap((entry) =>

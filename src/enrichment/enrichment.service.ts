@@ -346,10 +346,12 @@ accident
 Ako nije jasno → "unknown".
 
 3. locationText
-Pretvori lokalni naziv mesta u lokaciju pogodnu za OpenStreetMap Nominatim.
+Pretvori lokalni naziv mesta u naziv pogodan za Google Maps geocoding.
+
+Vrati SAMO naziv ulice ili mesta, BEZ grada (ne dodavaj ", Nis").
 
 Format mora biti:
-"<naziv mesta>, Nis"
+"<naziv mesta>"
 
 Ukloni reci:
 kod
@@ -360,11 +362,14 @@ posle
 
 Primeri normalizacije:
 
-"kod disa" → "DIS, Nis"
-"kod stop shopa" → "Stop Shop, Nis"
-"kod delte" → "Delta Planet, Nis"
-"kod elektronskog" → "Elektronska industrija, Nis"
-"bulevar nemanjica" → "Bulevar Nemanjica, Nis"
+"kod disa" → "DIS"
+"kod stop shopa" → "Stop Shop"
+"kod delte" → "Delta Planet"
+"kod elektronskog" → "Elektronska industrija"
+"bulevar nemanjica" → "Bulevar Nemanjica"
+"knjazevacka" → "Knjazevacka"
+"kod niteksa" → "Niteks"
+"vojvode putnika" → "Vojvode Putnika"
 
 Ako nema jasne lokacije vrati null.
 
@@ -468,7 +473,7 @@ Odgovori ISKLJUCIVO validnim JSON bez objasnjenja.`,
       expires_at: Date;
       latitude: number | null;
       longitude: number | null;
-      geo_source: "fallback" | "nominatim" | null;
+      geo_source: "fallback" | "nominatim" | "cache" | "google" | "google_partial" | null;
       upvotes: number;
       downvotes: number;
     }>;
