@@ -196,6 +196,11 @@ Repository secrets required by workflow:
 - `SERVER_USER`
 - `SSH_PRIVATE_KEY`
 
+Important security note:
+
+- Development compose now reads `OPENAI_API_KEY` from environment (no hardcoded key in source-controlled compose).
+- Keep real secrets only in `.env` on your machine and `/opt/radar-puls/.env` on VPS.
+
 Optional secrets for private GHCR pulls on VPS:
 
 - `GHCR_USERNAME`
@@ -204,17 +209,31 @@ Optional secrets for private GHCR pulls on VPS:
 One-time server prep (example target path used by workflow):
 
 1. Clone repository into `/opt/radar-puls`.
-2. Create `/opt/radar-puls/.env` from `.env.example` and set production values.
+2. Create `/opt/radar-puls/.env` from `.env.production.example` and set production values.
 3. Ensure Docker + Compose plugin are installed on VPS.
 4. Ensure `docker-compose.prod.yml` exists at `/opt/radar-puls`.
+
+Nginx + Let's Encrypt edge stack (optional, recommended):
+
+- Uses `docker-compose.edge.yml` and `deploy/nginx/templates/radar-puls.conf.template`.
+- Requires `DOMAIN` and `LETSENCRYPT_EMAIL` in `/opt/radar-puls/.env`.
+
+Initial certificate issuance (first time, on VPS):
+
+```bash
+cd /opt/radar-puls
+docker compose -f docker-compose.prod.yml -f docker-compose.edge.yml up -d api nginx
+docker compose -f docker-compose.edge.yml run --rm certbot certonly --webroot -w /var/www/certbot -d "$DOMAIN" --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email
+docker compose -f docker-compose.prod.yml -f docker-compose.edge.yml up -d --remove-orphans
+```
 
 Manual production run commands (on VPS):
 
 ```bash
 cd /opt/radar-puls
 export APP_IMAGE=ghcr.io/<owner>/<repo>:latest
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
+docker compose -f docker-compose.prod.yml -f docker-compose.edge.yml pull
+docker compose -f docker-compose.prod.yml -f docker-compose.edge.yml up -d --remove-orphans
 docker compose -f docker-compose.prod.yml exec -T api npm run migration:run
 ```
 
