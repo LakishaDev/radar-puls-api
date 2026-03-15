@@ -70,6 +70,7 @@ services:
     command: ["npm", "run", "start:worker"]
     environment:
       NODE_ENV: production
+      PORT: ${PORT:-3000}
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/radar_puls}
       DEVICE_TOKENS_JSON: ${DEVICE_TOKENS_JSON}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -100,6 +101,7 @@ services:
     command: ["npm", "run", "start:enrichment"]
     environment:
       NODE_ENV: production
+      PORT: ${PORT:-3000}
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/radar_puls}
       DEVICE_TOKENS_JSON: ${DEVICE_TOKENS_JSON}
       OPENAI_API_KEY: ${OPENAI_API_KEY}

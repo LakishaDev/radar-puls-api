@@ -234,7 +234,11 @@ cd /opt/radar-puls
 export APP_IMAGE=ghcr.io/<owner>/<repo>:latest
 docker compose -f docker-compose.prod.yml -f docker-compose.edge.yml pull
 docker compose -f docker-compose.prod.yml -f docker-compose.edge.yml up -d --remove-orphans
-docker compose -f docker-compose.prod.yml exec -T api npm run migration:run
+docker compose -f docker-compose.prod.yml exec -T api npm run migration:run:prod
+
+# Optional maintenance scripts
+./scripts/backup-db.sh
+./scripts/docker-prune.sh
 ```
 
 ### Endpoints

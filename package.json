@@ -18,6 +18,8 @@
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/database/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
+    "migration:run:prod": "node ./node_modules/typeorm/cli.js -d dist/database/data-source.prod.js migration:run",
+    "migration:revert:prod": "node ./node_modules/typeorm/cli.js -d dist/database/data-source.prod.js migration:revert",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f api db",

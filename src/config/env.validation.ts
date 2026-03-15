@@ -9,9 +9,10 @@ import {
 } from "class-validator";
 
 class EnvironmentVariables {
+  @IsOptional()
   @IsInt()
   @Min(1)
-  PORT!: number;
+  PORT?: number;
 
   @IsString()
   DATABASE_URL!: string;
