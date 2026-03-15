@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { GeocodingCacheEntity } from "./geocoding-cache.entity";
 import { MapPushSubscriptionEntity } from "./map-push-subscription.entity";
 import { RawEventEntity } from "./raw-event.entity";
 import { ParsedEventEntity } from "./parsed-event.entity";
@@ -13,7 +14,12 @@ import { ParsedEventEntity } from "./parsed-event.entity";
       useFactory: (configService: ConfigService) => ({
         type: "postgres" as const,
         url: configService.getOrThrow<string>("DATABASE_URL"),
-        entities: [RawEventEntity, ParsedEventEntity, MapPushSubscriptionEntity],
+        entities: [
+          RawEventEntity,
+          ParsedEventEntity,
+          MapPushSubscriptionEntity,
+          GeocodingCacheEntity,
+        ],
         synchronize: false,
         logging: false,
       }),
@@ -22,6 +28,7 @@ import { ParsedEventEntity } from "./parsed-event.entity";
       RawEventEntity,
       ParsedEventEntity,
       MapPushSubscriptionEntity,
+      GeocodingCacheEntity,
     ]),
   ],
   exports: [TypeOrmModule],

@@ -436,7 +436,13 @@ export class EventsService {
       expires_at: Date;
       latitude: number | null;
       longitude: number | null;
-      geo_source: "fallback" | "nominatim" | null;
+      geo_source:
+        | "fallback"
+        | "nominatim"
+        | "cache"
+        | "google"
+        | "google_partial"
+        | null;
       upvotes: number;
       downvotes: number;
       raw_message?: string;

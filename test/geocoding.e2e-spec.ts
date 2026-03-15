@@ -1,13 +1,16 @@
 import { ConfigService } from "@nestjs/config";
+import { getRepositoryToken } from "@nestjs/typeorm";
 import { Test, TestingModule } from "@nestjs/testing";
 import { AppLogger } from "../src/common/app.logger";
+import { GeocodingCacheEntity } from "../src/database/geocoding-cache.entity";
 import { GeocodingService } from "../src/geocoding/geocoding.service";
 
 describe("GeocodingService", () => {
   let service: GeocodingService;
 
   const configValues: Record<string, string | undefined> = {
-    NOMINATIM_USER_AGENT: "radar-puls-api/1.0 (contact: test@local)",
+    GOOGLE_GEOCODING_API_KEY: "test-google-key",
+    GOOGLE_GEOCODING_DELAY_MS: "0",
     GEO_ENABLED: "true",
   };
 
@@ -28,12 +31,17 @@ describe("GeocodingService", () => {
     error: jest.fn(),
   };
 
+  const cacheRepositoryMock = {
+    query: jest.fn(),
+  };
+
   beforeEach(async () => {
     configServiceMock.get.mockClear();
     configServiceMock.getOrThrow.mockClear();
     loggerMock.info.mockClear();
     loggerMock.warn.mockClear();
     loggerMock.error.mockClear();
+    cacheRepositoryMock.query.mockClear();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -45,6 +53,10 @@ describe("GeocodingService", () => {
         {
           provide: AppLogger,
           useValue: loggerMock,
+        },
+        {
+          provide: getRepositoryToken(GeocodingCacheEntity),
+          useValue: cacheRepositoryMock,
         },
       ],
     }).compile();
@@ -66,6 +78,8 @@ describe("GeocodingService", () => {
       lat: 43.3203,
       lng: 21.8958,
       source: "fallback",
+      isPartialMatch: false,
+      confidence: "high",
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -77,13 +91,33 @@ describe("GeocodingService", () => {
       lat: 43.32,
       lng: 21.91,
       source: "fallback",
+      isPartialMatch: false,
+      confidence: "high",
     });
   });
 
-  it("uses nominatim when fallback does not match", async () => {
+  it("uses Google geocoding when fallback and cache do not match", async () => {
+    cacheRepositoryMock.query
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
     jest.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
-      json: async () => [{ lat: "43.3178", lon: "21.9001" }],
+      json: async () => ({
+        status: "OK",
+        results: [
+          {
+            formatted_address: "Ulica Nepoznata 12, Nis, Serbia",
+            geometry: {
+              location: { lat: 43.3178, lng: 21.9001 },
+              location_type: "ROOFTOP",
+            },
+            partial_match: false,
+            place_id: "place-1",
+            types: ["street_address"],
+          },
+        ],
+      }),
     } as Response);
 
     const result = await service.geocodeLocation("Ulica nepoznata 12");
@@ -91,11 +125,45 @@ describe("GeocodingService", () => {
     expect(result).toEqual({
       lat: 43.3178,
       lng: 21.9001,
-      source: "nominatim",
+      source: "google",
+      isPartialMatch: false,
+      confidence: "high",
+      formattedAddress: "Ulica Nepoznata 12, Nis, Serbia",
     });
   });
 
-  it("returns null on nominatim failure", async () => {
+  it("returns cached google partial geocode without calling fetch", async () => {
+    cacheRepositoryMock.query
+      .mockResolvedValueOnce([
+        {
+          id: "cache-id",
+          lat: 43.311,
+          lng: 21.901,
+          is_partial: true,
+          location_type: "APPROXIMATE",
+          formatted_addr: "Delimicno poklapanje, Nis, Serbia",
+          verified: false,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const fetchSpy = jest.spyOn(globalThis, "fetch" as any);
+    const result = await service.geocodeLocation("kod pijace");
+
+    expect(result).toEqual({
+      lat: 43.311,
+      lng: 21.901,
+      source: "google_partial",
+      isPartialMatch: true,
+      confidence: "low",
+      formattedAddress: "Delimicno poklapanje, Nis, Serbia",
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns null on Google geocoding failure", async () => {
+    cacheRepositoryMock.query.mockResolvedValueOnce([]);
+
     jest
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(new Error("network timeout"));
@@ -103,5 +171,51 @@ describe("GeocodingService", () => {
     const result = await service.geocodeLocation("Neka random lokacija");
 
     expect(result).toBeNull();
+  });
+
+  it("promotes cache rows when cumulative net upvotes reach threshold", async () => {
+    cacheRepositoryMock.query
+      .mockResolvedValueOnce([
+        { id: "cache-1", normalized_text: "kod pijace" },
+        { id: "cache-2", normalized_text: "kod mosta" },
+      ])
+      .mockResolvedValueOnce([
+        { location_text: "Kod pijace", upvotes: 3, downvotes: 0 },
+        { location_text: "kod pijace", upvotes: 4, downvotes: 2 },
+        { location_text: "kod mosta", upvotes: 5, downvotes: 1 },
+      ])
+      .mockResolvedValueOnce([{ id: "cache-1" }]);
+
+    const promotedCount = await service.promoteVerifiedLocations();
+
+    expect(promotedCount).toBe(1);
+    expect(cacheRepositoryMock.query).toHaveBeenCalledTimes(3);
+    expect(cacheRepositoryMock.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining("UPDATE geocoding_cache"),
+      [["cache-1"]],
+    );
+  });
+
+  it("does not promote when cumulative net upvotes stay below threshold", async () => {
+    cacheRepositoryMock.query
+      .mockResolvedValueOnce([{ id: "cache-1", normalized_text: "kod pijace" }])
+      .mockResolvedValueOnce([
+        { location_text: "kod pijace", upvotes: 4, downvotes: 0 },
+      ]);
+
+    const promotedCount = await service.promoteVerifiedLocations();
+
+    expect(promotedCount).toBe(0);
+    expect(cacheRepositoryMock.query).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns zero when there are no unverified cache rows", async () => {
+    cacheRepositoryMock.query.mockResolvedValueOnce([]);
+
+    const promotedCount = await service.promoteVerifiedLocations();
+
+    expect(promotedCount).toBe(0);
+    expect(cacheRepositoryMock.query).toHaveBeenCalledTimes(1);
   });
 });

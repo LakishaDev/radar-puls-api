@@ -68,7 +68,13 @@ export class ParsedEventEntity {
   longitude!: number | null;
 
   @Column({ type: "text", name: "geo_source", nullable: true })
-  geoSource!: "fallback" | "nominatim" | null;
+  geoSource!:
+    | "fallback"
+    | "nominatim"
+    | "cache"
+    | "google"
+    | "google_partial"
+    | null;
 
   @Column({
     type: "timestamptz",

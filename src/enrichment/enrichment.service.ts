@@ -109,6 +109,22 @@ export class EnrichmentService implements OnModuleDestroy {
         }
       }
 
+      try {
+        const promotedCount = await this.geocodingService.promoteVerifiedLocations();
+        if (promotedCount > 0) {
+          this.logger.info("geocoding_cache_promoted", {
+            promoted_count: promotedCount,
+          });
+        }
+      } catch (error) {
+        this.logger.warn("geocoding_cache_promotion_failed", {
+          error:
+            error instanceof Error
+              ? error.message
+              : "unknown geocoding cache promotion error",
+        });
+      }
+
       this.logger.info("enrichment_batch_completed", {
         claimed_count: pending.length,
         enriched_count: enrichedCount,

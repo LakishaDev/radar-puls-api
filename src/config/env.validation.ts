@@ -96,7 +96,12 @@ class EnvironmentVariables {
   ENRICHMENT_RETRY_COOLDOWN_MS?: number;
 
   @IsString()
-  NOMINATIM_USER_AGENT!: string;
+  GOOGLE_GEOCODING_API_KEY!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  GOOGLE_GEOCODING_DELAY_MS?: number;
 
   @IsOptional()
   @IsIn(["true", "false"])

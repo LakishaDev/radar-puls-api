@@ -10,7 +10,13 @@ export class MapEventDto {
   expiresAt!: Date;
   lat!: number | null;
   lng!: number | null;
-  geoSource!: "fallback" | "nominatim" | null;
+  geoSource!:
+    | "fallback"
+    | "nominatim"
+    | "cache"
+    | "google"
+    | "google_partial"
+    | null;
   upvotes!: number;
   downvotes!: number;
   rawMessage?: string;

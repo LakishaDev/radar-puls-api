@@ -1,10 +1,12 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppLogger } from "../common/app.logger";
+import { GeocodingCacheEntity } from "../database/geocoding-cache.entity";
 import { GeocodingService } from "./geocoding.service";
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, TypeOrmModule.forFeature([GeocodingCacheEntity])],
   providers: [GeocodingService, AppLogger],
   exports: [GeocodingService],
 })
