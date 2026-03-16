@@ -16,7 +16,7 @@ export class CreateParsedEventsTable1710350000000
         location_text TEXT,
         description TEXT,
         event_time TIMESTAMPTZ,
-        confidence NUMERIC(3,2) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+        confidence NUMERIC(5,2) NOT NULL CHECK (confidence >= 0 AND confidence <= 100),
         parser_version TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

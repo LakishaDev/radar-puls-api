@@ -258,7 +258,7 @@ export class EventsService {
         params.senderName?.trim() || null,
         params.description?.trim() || null,
         now,
-        0.75,
+        75,
         params.lat ?? null,
         params.lng ?? null,
         params.lat !== undefined && params.lng !== undefined ? "fallback" : null,

@@ -103,6 +103,7 @@ describe("EnrichmentService (e2e)", () => {
         senderName: "Marko",
         locationText: "Bulevar Nemanjica",
         eventType: "radar",
+        confidence: 91,
       });
     geocodingServiceMock.geocodeLocation.mockResolvedValueOnce({
       lat: 43.3237,
@@ -126,6 +127,7 @@ describe("EnrichmentService (e2e)", () => {
       43.3237,
       21.896,
       "fallback",
+      91,
     ]);
   });
 
@@ -187,6 +189,7 @@ describe("EnrichmentService (e2e)", () => {
       "parsed-3",
       "Petar",
       "Delta",
+      null,
       null,
       null,
       null,
