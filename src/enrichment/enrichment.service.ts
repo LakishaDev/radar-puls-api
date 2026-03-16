@@ -21,6 +21,7 @@ type EnrichmentExtraction = {
   senderName: string | null;
   locationText: string | null;
   eventType?: EventType;
+  confidence?: number;
 };
 
 const ALLOWED_EVENT_TYPES: EventType[] = [
@@ -195,6 +196,7 @@ export class EnrichmentService implements OnModuleDestroy {
           latitude = $5,
           longitude = $6,
           geo_source = $7,
+          confidence = COALESCE($8, confidence),
           enrich_status = 'enriched',
           enriched_at = NOW(),
           updated_at = NOW()
@@ -208,6 +210,7 @@ export class EnrichmentService implements OnModuleDestroy {
           geoResult?.lat ?? null,
           geoResult?.lng ?? null,
           geoResult?.source ?? null,
+          extraction.confidence ?? null,
         ],
       );
 
@@ -337,12 +340,12 @@ vojvode putnika → Vojvode Putnika
 Ako nema jasne lokacije → null.
 
 confidence
-Broj 0–1 koji označava sigurnost ekstrakcije.
+Broj 0–100 koji označava sigurnost ekstrakcije.
 
-0.9–1.0 → jasno  
-0.6–0.8 → verovatno  
-0.3–0.5 → nesigurno  
-<0.3 → vrlo nesigurno
+90–100 → jasno  
+60–80 → verovatno  
+30–50 → nesigurno  
+<30 → vrlo nesigurno
 
 Odgovori samo validnim JSON.`,
         },
@@ -362,6 +365,7 @@ Odgovori samo validnim JSON.`,
       senderName?: unknown;
       locationText?: unknown;
       eventType?: unknown;
+      confidence?: unknown;
     };
 
     const senderName =
@@ -377,11 +381,26 @@ Odgovori samo validnim JSON.`,
       ALLOWED_EVENT_TYPES.includes(parsed.eventType as EventType)
         ? (parsed.eventType as EventType)
         : undefined;
+    const confidenceRaw =
+      typeof parsed.confidence === "number"
+        ? parsed.confidence
+        : typeof parsed.confidence === "string"
+          ? Number.parseFloat(parsed.confidence)
+          : NaN;
+    const confidenceNormalized = Number.isFinite(confidenceRaw)
+      ? confidenceRaw <= 1
+        ? confidenceRaw * 100
+        : confidenceRaw
+      : NaN;
+    const confidence = Number.isFinite(confidenceNormalized)
+      ? Number(Math.min(100, Math.max(0, confidenceNormalized)).toFixed(2))
+      : undefined;
 
     return {
       senderName,
       locationText,
       eventType,
+      confidence,
     };
   }
 

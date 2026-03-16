@@ -46,7 +46,7 @@ export class ParsedEventEntity {
   @Column({ type: "timestamptz", name: "event_time", nullable: true })
   eventTime!: Date | null;
 
-  @Column({ type: "numeric", name: "confidence", precision: 3, scale: 2 })
+  @Column({ type: "numeric", name: "confidence", precision: 5, scale: 2 })
   confidence!: number;
 
   @Column({ type: "text", name: "enrich_status", nullable: true })
