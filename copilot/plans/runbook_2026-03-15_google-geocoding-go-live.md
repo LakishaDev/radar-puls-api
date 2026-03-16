@@ -87,7 +87,7 @@ Expected window: 15-30 min
 
 1. Posalji test event koji nije u lokalnom fallback-u:
 
-   curl -s -X POST "http://localhost:3000/api/events/viber" -H "Authorization: Bearer dev-token-01" -H "Content-Type: application/json" -d '{"source":"viber","group":"radar-test","message":"Kod Boska Buha pijace na bulevaru zaustavljaju","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","device_id":"android_listener_01"}'
+   curl -s -X POST "https://api.radarpuls.com/api/events/viber" -H "Authorization: Bearer dev-token-01" -H "Content-Type: application/json" -d '{"source":"viber","group":"radar-test","message":"Na pevcu pravac ka delti zaustavljaju","timestamp":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'","device_id":"android_listener_01"}'
 
 2. Proveri da ima redova u geocoding_cache:
 
