@@ -121,5 +121,12 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
             docker compose -f docker-compose.prod.yml exec -T api npm run migration:run:prod
 
+            # Reload or restart nginx with updated config
+            if docker compose -f docker-compose.edge.yml ps --status running nginx | grep -q nginx; then
+              docker compose -f docker-compose.edge.yml exec -T nginx nginx -s reload
+            else
+              docker compose -f docker-compose.edge.yml up -d nginx
+            fi
+
             # Cleanup old images
             docker image prune -af --filter "until=168h"
