@@ -40,6 +40,7 @@ server {
   }
 
   location /ws/map/ {
+    rewrite ^/ws/map/(.*)$ /socket.io/$1 break;
     proxy_pass http://api:3000;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
