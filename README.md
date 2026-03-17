@@ -265,8 +265,9 @@ docker compose -f docker-compose.prod.yml exec -T api npm run migration:run:prod
 
 Realtime channel:
 
-- `WS /ws` (Socket.IO path)
-- emitted events: `new_report`, `report_updated`, `report_removed`
+- `WS /socket.io` (Socket.IO default path)
+- public emitted events: `new_report`, `report_updated`, `report_removed`
+- admin authenticated stream (`auth.token = ADMIN_API_TOKEN`): `event` with payload `{ type, reportId, payload? }`
 
 `POST /api/events/viber` contract:
 

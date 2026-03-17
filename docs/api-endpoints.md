@@ -194,15 +194,158 @@ Auth: `Authorization: Bearer <admin-token>`
 ### `GET /api/admin/events`
 Paginated, filterable event list.
 
-**Query params**
+
+### `GET /api/admin/events/:id/activity-log`
+Get activity log entries for one event.
+
+**Response**
+```json
+[
+  {
+    "id": "uuid",
+    "event_id": "uuid",
+    "action": "approved",
+    "performed_by": "admin",
+    "old_values": { "moderation_status": "pending_review" },
+    "new_values": { "moderation_status": "approved" },
+    "note": null,
+    "created_at": "2026-03-17T10:00:00Z"
+  }
+]
+```
+
+---
+
+### `GET /api/admin/events/confirm-location-candidates`
+Returns grouped candidates for bulk location confirmation.
+
+**Response**
+```json
+[
+  {
+    "location_text": "Bulevar Nemanjica",
+    "lat": 43.321,
+    "lng": 21.896,
+    "geo_source": "google",
+    "occurrence_count": 7,
+    "event_ids": ["uuid1", "uuid2", "uuid3"]
+  }
+]
+```
+
+---
 | Param | Type | Values |
 |-------|------|--------|
 | `status` | string | `auto_approved`, `pending_review`, `approved`, `rejected` |
-| `eventType` | string | `police`, `accident`, `traffic_jam`, `radar`, `control`, `unknown` |
+
+### `POST /api/admin/events/:id/confirm-location`
+Confirm event location and write/update geocoding cache.
+
+**Request**
+```json
+{
+  "locationText": "Bulevar Nemanjica",
+  "latitude": 43.321,
+  "longitude": 21.896,
+  "confirmedBy": "admin"
+}
+```
+
+**Response**
+```json
+{ "id": "uuid", "cached": true }
+```
+
+---
+
+### `POST /api/admin/events/bulk-confirm-location`
+Bulk confirm event locations and upsert corresponding geocoding cache entries.
+
+**Request**
+```json
+{
+  "eventIds": ["uuid1", "uuid2", "uuid3"],
+  "confirmedBy": "admin"
+}
+```
+
+**Response**
+```json
+{ "confirmed": 3, "cached": 2 }
+```
+
+---
 | `parseStatus` | string | `parsed`, `no_match`, `partial` |
 | `enrichStatus` | string | `pending`, `enriched`, `failed` |
 | `since` | ISO8601 | — |
-| `until` | ISO8601 | — |
+
+### `GET /api/admin/geocoding-cache`
+Paginated geocoding cache list for admin moderation.
+
+**Query params**
+| Param | Type | Values / Notes |
+|-------|------|----------------|
+| `search` | string | Full-text search over `location_text`, `normalized_text`, `formatted_addr` |
+| `verified` | string | `true`, `false` |
+| `sortBy` | string | `hit_count`, `created_at`, `updated_at`, `location_text`; aliases: `hitCount`, `createdAt`, `updatedAt`, `locationText` |
+| `sortOrder` | string | `asc`, `desc` (case-insensitive) |
+| `page` | number | default `1` |
+| `limit` | number | 1–100, default `20` |
+
+**Response**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "location_text": "Bulevar Nemanjica",
+      "lat": 43.321,
+      "lng": 21.896,
+      "hit_count": 15,
+      "verified": true,
+      "formatted_addr": "Bulevar Nemanjica, Nis",
+      "created_at": "2026-03-10T12:00:00Z",
+      "updated_at": "2026-03-15T08:00:00Z"
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "limit": 20
+}
+```
+
+---
+
+### `PATCH /api/admin/geocoding-cache/:id`
+Update one geocoding cache entry.
+
+**Request** (all fields optional)
+```json
+{
+  "locationText": "Bulevar Nemanjica",
+  "lat": 43.321,
+  "lng": 21.896,
+  "verified": true,
+  "formattedAddr": "Bulevar Nemanjica, Nis"
+}
+```
+
+**Response**
+```json
+{ "id": "uuid" }
+```
+
+---
+
+### `DELETE /api/admin/geocoding-cache/:id`
+Delete one geocoding cache entry.
+
+**Response**
+```json
+{ "deleted": true }
+```
+
+---
 | `page` | number | default `1` |
 | `limit` | number | 1–100, default `20` |
 | `search` | string | Full-text search |

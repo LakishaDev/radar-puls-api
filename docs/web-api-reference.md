@@ -17,7 +17,7 @@
 | `POST` | `/api/map/subscriptions` | — | Push notification pretplata |
 | `DELETE` | `/api/map/subscriptions` | — | Odjava push notifikacija |
 | `GET` | `/api/stats/public` | — | Javna statistika |
-| WebSocket | `/ws` | — | Real-time dojave (Socket.IO) |
+| WebSocket | `/socket.io` | — | Real-time dojave (Socket.IO) |
 
 > Endpointi pod `/api/events/*` su za Android/device klijente — **ne koristiti u webu**.
 
@@ -303,7 +303,7 @@ GET /api/stats/public
 ## 8. WebSocket — real-time dojave
 
 ```
-wss://api.radarpuls.com/ws/map
+wss://api.radarpuls.com/socket.io
 ```
 
 Koristi **Socket.IO** klijent (v4+).
@@ -314,7 +314,7 @@ Koristi **Socket.IO** klijent (v4+).
 import { io } from "socket.io-client";
 
 const socket = io("https://api.radarpuls.com", {
-  path: "/ws/map",
+  path: "/socket.io",
   transports: ["websocket"],
 });
 
@@ -326,9 +326,20 @@ socket.on("connect", () => {
 socket.on("connected", (data) => {
   // data: { status: "ok", channel: "map-live" }
 });
+
+// Admin stream (zahteva admin token)
+const adminSocket = io("https://api.radarpuls.com", {
+  path: "/socket.io",
+  transports: ["websocket", "polling"],
+  auth: { token: "<ADMIN_API_TOKEN>" },
+});
+
+adminSocket.on("event", (data) => {
+  // data: { type: "new_report" | "report_updated" | "report_removed", reportId: "uuid", payload?: unknown }
+});
 ```
 
-> **Važno**: `path` mora biti `/ws/map` — nije Socket.IO default `/socket.io/`.
+> **Važno**: koristi se Socket.IO putanja `/socket.io`.
 
 ### Događaji koje server šalje
 
@@ -338,6 +349,7 @@ socket.on("connected", (data) => {
 | `new_report` | Nova dojava je odobrena i vidljiva | `{ id: "uuid" }` (ili pun `MapEventDto` objekat) |
 | `report_updated` | Dojava je glasana (broj upvotes/downvotes se promenio) | `{ id: "uuid", upvotes: N, downvotes: N }` |
 | `report_removed` | Dojava je preglasana i skinuta sa mape | `{ id: "uuid" }` |
+| `event` | Admin auth stream (token u `auth.token`) | `{ type, reportId, payload? }` |
 
 ### Preporučena web integracija
 

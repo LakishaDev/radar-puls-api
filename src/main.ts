@@ -35,20 +35,35 @@ async function bootstrap(): Promise<void> {
 
   const realtimePublisher = app.get(RealtimePublisher);
   const io = new Server(app.getHttpServer(), {
-    path: "/ws/map",
+    path: "/socket.io",
     cors: {
       origin: allowedOrigins.length > 0 ? allowedOrigins : "*",
     },
   });
 
   io.on("connection", (socket) => {
+    const expectedToken = configService.get<string>("ADMIN_API_TOKEN")?.trim();
+    const rawToken = socket.handshake.auth?.token;
+    const token = typeof rawToken === "string" ? rawToken.trim() : "";
+    const isAdminClient = Boolean(expectedToken && token && token === expectedToken);
+
+    if (token && !isAdminClient) {
+      socket.disconnect(true);
+      return;
+    }
+
+    if (isAdminClient) {
+      void socket.join("admin");
+    }
+
     socket.emit("connected", {
       status: "ok",
-      channel: "map-live",
+      channel: isAdminClient ? "admin-live" : "map-live",
     });
   });
 
   const realtimeSubscription: Subscription = realtimePublisher.events$.subscribe((event) => {
+    io.to("admin").emit("event", event);
     io.emit(event.type, event.payload ?? { id: event.reportId });
   });
 

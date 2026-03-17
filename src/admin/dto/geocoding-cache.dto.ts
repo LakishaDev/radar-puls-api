@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsBoolean,
   IsIn,
@@ -20,10 +20,32 @@ export class CacheListQueryDto {
   verified?: "true" | "false";
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const normalized = value.trim();
+    const aliases: Record<string, string> = {
+      hitCount: "hit_count",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+      locationText: "location_text",
+    };
+
+    return aliases[normalized] ?? normalized;
+  })
   @IsIn(["hit_count", "created_at", "updated_at", "location_text"])
   sortBy?: "hit_count" | "created_at" | "updated_at" | "location_text";
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    return value.trim().toLowerCase();
+  })
   @IsIn(["asc", "desc"])
   sortOrder?: "asc" | "desc";
 
