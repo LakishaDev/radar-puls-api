@@ -3,6 +3,7 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { Test, TestingModule } from "@nestjs/testing";
 import { AppLogger } from "../src/common/app.logger";
 import { GeocodingCacheEntity } from "../src/database/geocoding-cache.entity";
+import { LocationAliasEntity } from "../src/database/location-alias.entity";
 import { GeocodingService } from "../src/geocoding/geocoding.service";
 
 describe("GeocodingService", () => {
@@ -35,6 +36,11 @@ describe("GeocodingService", () => {
     query: jest.fn(),
   };
 
+  const aliasRepositoryMock = {
+    find: jest.fn().mockResolvedValue([]),
+    query: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     configServiceMock.get.mockClear();
     configServiceMock.getOrThrow.mockClear();
@@ -42,6 +48,8 @@ describe("GeocodingService", () => {
     loggerMock.warn.mockClear();
     loggerMock.error.mockClear();
     cacheRepositoryMock.query.mockClear();
+    aliasRepositoryMock.find.mockClear();
+    aliasRepositoryMock.query.mockClear();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,6 +65,10 @@ describe("GeocodingService", () => {
         {
           provide: getRepositoryToken(GeocodingCacheEntity),
           useValue: cacheRepositoryMock,
+        },
+        {
+          provide: getRepositoryToken(LocationAliasEntity),
+          useValue: aliasRepositoryMock,
         },
       ],
     }).compile();
