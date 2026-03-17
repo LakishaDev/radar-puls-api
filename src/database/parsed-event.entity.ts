@@ -74,7 +74,12 @@ export class ParsedEventEntity {
     | "cache"
     | "google"
     | "google_partial"
+    | "admin"
+    | "admin_confirmed"
     | null;
+
+  @Column({ type: "text", name: "edit_source", default: "ai_raw", nullable: true })
+  editSource!: "ai_raw" | "admin_edited" | "admin_confirmed" | "web_submitted" | null;
 
   @Column({
     type: "timestamptz",
@@ -108,6 +113,9 @@ export class ParsedEventEntity {
 
   @Column({ type: "text", name: "moderation_note", nullable: true })
   moderationNote!: string | null;
+
+  @Column({ type: "timestamptz", name: "hidden_at", nullable: true })
+  hiddenAt!: Date | null;
 
   @Column({ type: "text", name: "parser_version" })
   parserVersion!: string;

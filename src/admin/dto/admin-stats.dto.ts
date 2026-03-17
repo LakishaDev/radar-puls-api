@@ -10,4 +10,7 @@ export class AdminStatsDto {
   events_last_7d!: number;
   top_event_types!: Array<{ type: string; count: number }>;
   enrichment_success_rate!: number;
+  admin_edited_count!: number;
+  admin_confirmed_count!: number;
+  admin_geo_count!: number;
 }

@@ -4,6 +4,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AppLogger } from "../common/app.logger";
 import { GeocodingCacheEntity } from "../database/geocoding-cache.entity";
+import { LocationAliasEntity } from "../database/location-alias.entity";
 
 export type GeoSource =
   | "fallback"
@@ -107,6 +108,8 @@ export class GeocodingService {
     private readonly logger: AppLogger,
     @InjectRepository(GeocodingCacheEntity)
     private readonly cacheRepository: Repository<GeocodingCacheEntity>,
+    @InjectRepository(LocationAliasEntity)
+    private readonly aliasRepository: Repository<LocationAliasEntity>,
   ) {
     this.apiKey = this.configService.getOrThrow<string>("GOOGLE_GEOCODING_API_KEY");
     this.geoEnabled = this.getBoolean("GEO_ENABLED", true);
@@ -122,6 +125,11 @@ export class GeocodingService {
     const fallback = this.findFallback(normalizedInput);
     if (fallback) {
       return fallback;
+    }
+
+    const alias = await this.findAlias(normalizedInput);
+    if (alias) {
+      return alias;
     }
 
     if (!this.geoEnabled) {
@@ -190,6 +198,20 @@ export class GeocodingService {
     return promotedRows.length;
   }
 
+  async markAsVerified(normalizedText: string): Promise<boolean> {
+    const result = (await this.cacheRepository.query(
+      `
+      UPDATE geocoding_cache
+      SET verified = true, updated_at = NOW()
+      WHERE normalized_text = $1 AND verified = false
+      RETURNING id
+      `,
+      [normalizedText],
+    )) as Array<{ id: string }>;
+
+    return result.length > 0;
+  }
+
   private findFallback(normalizedInput: string): GeoResult | null {
     const bestMatch = FLAT_FALLBACKS.find((entry) =>
       normalizedInput.includes(entry.normalizedPhrase),
@@ -205,6 +227,35 @@ export class GeocodingService {
       source: "fallback",
       isPartialMatch: false,
       confidence: "high",
+    };
+  }
+
+  private async findAlias(normalizedInput: string): Promise<GeoResult | null> {
+    const rows = (await this.aliasRepository.query(
+      `
+      SELECT target_lat, target_lng, target_location_text
+      FROM location_aliases
+      WHERE normalized_alias = $1
+      LIMIT 1
+      `,
+      [normalizedInput],
+    )) as Array<{
+      target_lat: number;
+      target_lng: number;
+      target_location_text: string;
+    }>;
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return {
+      lat: Number(rows[0].target_lat),
+      lng: Number(rows[0].target_lng),
+      source: "fallback",
+      isPartialMatch: false,
+      confidence: "high",
+      formattedAddress: rows[0].target_location_text,
     };
   }
 
@@ -459,7 +510,7 @@ export class GeocodingService {
   }
 }
 
-function normalizeText(value: string): string {
+export function normalizeText(value: string): string {
   return value
     .toLowerCase()
     .normalize("NFD")

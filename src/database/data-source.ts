@@ -3,7 +3,9 @@ import * as dotenv from "dotenv";
 import { DataSource } from "typeorm";
 
 dotenv.config();
+import { AdminActivityLogEntity } from "./admin-activity-log.entity";
 import { GeocodingCacheEntity } from "./geocoding-cache.entity";
+import { LocationAliasEntity } from "./location-alias.entity";
 import { RawEventEntity } from "./raw-event.entity";
 import { ParsedEventEntity } from "./parsed-event.entity";
 import { MapPushSubscriptionEntity } from "./map-push-subscription.entity";
@@ -20,6 +22,8 @@ export const AppDataSource = new DataSource({
     ParsedEventEntity,
     MapPushSubscriptionEntity,
     GeocodingCacheEntity,
+    AdminActivityLogEntity,
+    LocationAliasEntity,
   ],
   migrations: [migrationGlob],
   synchronize: false,

@@ -1,4 +1,13 @@
-import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
+import {
+  IsISO8601,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from "class-validator";
 
 export class UpdateAdminEventDto {
   @IsOptional()
@@ -25,6 +34,37 @@ export class UpdateAdminEventDto {
   @IsString()
   @MaxLength(500)
   description?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  geoSource?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  confidence?: number | null;
+
+  @IsOptional()
+  @IsISO8601()
+  eventTime?: string | null;
+
+  @IsOptional()
+  @IsISO8601()
+  expiresAt?: string | null;
 }
 
 export class AdminModerationActionDto {

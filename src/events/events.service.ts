@@ -229,6 +229,7 @@ export class EventsService {
         latitude,
         longitude,
         geo_source,
+        edit_source,
         moderation_status,
         parser_version
       )
@@ -246,6 +247,7 @@ export class EventsService {
         $8,
         $9,
         $10,
+        'web_submitted',
         'pending_review',
         'web-v1'
       )
@@ -298,6 +300,7 @@ export class EventsService {
         WHERE enriched_at IS NOT NULL
           AND expires_at > NOW()
           AND moderation_status IN ('auto_approved', 'approved')
+          AND hidden_at IS NULL
           AND downvotes <= upvotes * 2
       )
       SELECT
@@ -341,6 +344,7 @@ export class EventsService {
       WHERE enriched_at IS NOT NULL
         AND expires_at > NOW()
         AND moderation_status IN ('auto_approved', 'approved')
+        AND hidden_at IS NULL
         AND downvotes <= upvotes * 2
       GROUP BY event_type
       ORDER BY count DESC
@@ -354,6 +358,7 @@ export class EventsService {
       WHERE enriched_at IS NOT NULL
         AND expires_at > NOW()
         AND moderation_status IN ('auto_approved', 'approved')
+        AND hidden_at IS NULL
         AND downvotes <= upvotes * 2
       GROUP BY EXTRACT(HOUR FROM created_at)
       ORDER BY hour ASC
@@ -414,6 +419,7 @@ export class EventsService {
       WHERE pe.enriched_at IS NOT NULL
         AND pe.expires_at > NOW()
         AND pe.moderation_status IN ('auto_approved', 'approved')
+        AND pe.hidden_at IS NULL
         AND pe.downvotes <= pe.upvotes * 2
         AND pe.created_at >= $1
         AND (

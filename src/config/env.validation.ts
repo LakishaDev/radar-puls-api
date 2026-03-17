@@ -2,6 +2,7 @@ import { plainToInstance } from "class-transformer";
 import {
   IsIn,
   IsInt,
+  Max,
   IsOptional,
   IsString,
   Min,
@@ -106,6 +107,16 @@ class EnvironmentVariables {
   @IsOptional()
   @IsIn(["true", "false"])
   GEO_ENABLED?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  GEO_AUTO_VERIFY_ENABLED?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(50)
+  @Max(100)
+  GEO_AUTO_VERIFY_MIN_CONFIDENCE?: number;
 
   @IsOptional()
   @IsString()

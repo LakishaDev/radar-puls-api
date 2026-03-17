@@ -6,7 +6,7 @@ import { Repository } from "typeorm";
 import { AppLogger } from "../common/app.logger";
 import { ParsedEventEntity } from "../database/parsed-event.entity";
 import { MapEventDto } from "../events/dto/map-event.dto";
-import { GeocodingService } from "../geocoding/geocoding.service";
+import { GeocodingService, normalizeText } from "../geocoding/geocoding.service";
 import { EventType } from "../parsing/types";
 import { RealtimePublisher } from "../realtime/realtime.publisher";
 
@@ -213,6 +213,28 @@ export class EnrichmentService implements OnModuleDestroy {
           extraction.confidence ?? null,
         ],
       );
+
+      const autoVerifyEnabled = this.configService.get<string>("GEO_AUTO_VERIFY_ENABLED") === "true";
+      const minConfidence = Number(this.configService.get("GEO_AUTO_VERIFY_MIN_CONFIDENCE") ?? 90);
+
+      if (
+        autoVerifyEnabled &&
+        geoResult &&
+        geoResult.source === "google" &&
+        !geoResult.isPartialMatch &&
+        Number(extraction.confidence ?? 0) >= minConfidence &&
+        extraction.locationText
+      ) {
+        const normalized = normalizeText(extraction.locationText);
+        if (normalized) {
+          await this.geocodingService.markAsVerified(normalized);
+          this.logger.info("geo_auto_verified", {
+            eventId: event.id,
+            locationText: extraction.locationText,
+            confidence: extraction.confidence,
+          });
+        }
+      }
 
       this.logger.info("enrichment_success", {
         parsed_event_id: event.id,

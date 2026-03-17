@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { AdminActivityLogEntity } from "./admin-activity-log.entity";
 import { GeocodingCacheEntity } from "./geocoding-cache.entity";
+import { LocationAliasEntity } from "./location-alias.entity";
 import { MapPushSubscriptionEntity } from "./map-push-subscription.entity";
 import { RawEventEntity } from "./raw-event.entity";
 import { ParsedEventEntity } from "./parsed-event.entity";
@@ -19,6 +21,8 @@ import { ParsedEventEntity } from "./parsed-event.entity";
           ParsedEventEntity,
           MapPushSubscriptionEntity,
           GeocodingCacheEntity,
+          AdminActivityLogEntity,
+          LocationAliasEntity,
         ],
         synchronize: false,
         logging: false,
@@ -29,6 +33,8 @@ import { ParsedEventEntity } from "./parsed-event.entity";
       ParsedEventEntity,
       MapPushSubscriptionEntity,
       GeocodingCacheEntity,
+      AdminActivityLogEntity,
+      LocationAliasEntity,
     ]),
   ],
   exports: [TypeOrmModule],
