@@ -6,6 +6,7 @@ import { LocationAliasEntity } from "./location-alias.entity";
 import { RawEventEntity } from "./raw-event.entity";
 import { ParsedEventEntity } from "./parsed-event.entity";
 import { MapPushSubscriptionEntity } from "./map-push-subscription.entity";
+import { MobilePushTokenEntity } from "./mobile-push-token.entity";
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -14,6 +15,7 @@ export const AppDataSource = new DataSource({
     RawEventEntity,
     ParsedEventEntity,
     MapPushSubscriptionEntity,
+    MobilePushTokenEntity,
     GeocodingCacheEntity,
     AdminActivityLogEntity,
     LocationAliasEntity,

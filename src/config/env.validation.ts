@@ -141,6 +141,18 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   VAPID_SUBJECT?: string;
+
+  @IsOptional()
+  @IsString()
+  FCM_PROJECT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  FCM_CLIENT_EMAIL?: string;
+
+  @IsOptional()
+  @IsString()
+  FCM_PRIVATE_KEY?: string;
 }
 
 export function validateEnv(

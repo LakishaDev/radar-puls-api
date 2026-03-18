@@ -14,9 +14,14 @@ import { MapEventDto } from "../events/dto/map-event.dto";
 import { EventsService } from "../events/events.service";
 import { CreatePublicReportDto } from "./dto/create-public-report.dto";
 import {
+  RegisterMobilePushDto,
+  UnregisterMobilePushDto,
+} from "./dto/register-mobile-push.dto";
+import {
   SubscribeMapAlertsDto,
   UnsubscribeMapAlertsDto,
 } from "./dto/subscribe-map-alerts.dto";
+import { MobilePushService } from "./mobile-push.service";
 import { VoteReportDto } from "./dto/vote-report.dto";
 import { PublicCaptchaService } from "./public-captcha.service";
 import { PublicMapRateLimitGuard } from "./public-map-rate-limit.guard";
@@ -29,6 +34,7 @@ export class MapController {
     private readonly eventsService: EventsService,
     private readonly captchaService: PublicCaptchaService,
     private readonly pushNotificationsService: PushNotificationsService,
+    private readonly mobilePushService: MobilePushService,
   ) {}
 
   @Get("/reports")
@@ -102,5 +108,21 @@ export class MapController {
     @Body() body: UnsubscribeMapAlertsDto,
   ): Promise<{ status: "unsubscribed" }> {
     return this.pushNotificationsService.unsubscribe(body.endpoint);
+  }
+
+  @Post("/mobile/register-device")
+  @UseGuards(PublicMapRateLimitGuard)
+  async registerMobileDevice(
+    @Body() body: RegisterMobilePushDto,
+  ): Promise<{ status: "registered" }> {
+    return this.mobilePushService.registerToken(body);
+  }
+
+  @Delete("/mobile/register-device")
+  @UseGuards(PublicMapRateLimitGuard)
+  async unregisterMobileDevice(
+    @Body() body: UnregisterMobilePushDto,
+  ): Promise<{ status: "unregistered" }> {
+    return this.mobilePushService.unregisterToken(body.fcmToken);
   }
 }
