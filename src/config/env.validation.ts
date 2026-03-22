@@ -153,6 +153,62 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   FCM_PRIVATE_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_MIN_VERSION?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_LATEST_VERSION?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  APP_MAINTENANCE_MODE?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_MAINTENANCE_MESSAGE?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_FORCE_UPDATE_MESSAGE?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_PLAY_STORE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_APPLE_STORE_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_ANNOUNCEMENT_TEXT?: string;
+
+  @IsOptional()
+  @IsIn(["info", "warning", "success"])
+  APP_ANNOUNCEMENT_TYPE?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_ANNOUNCEMENT_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  APP_ANNOUNCEMENT_ID?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  APP_ANNOUNCEMENT_DISMISSIBLE?: string;
+
+  @IsOptional()
+  @IsString()
+  ANDROID_SHA256_FINGERPRINT?: string;
+
+  @IsOptional()
+  @IsString()
+  APPLE_TEAM_ID?: string;
 }
 
 export function validateEnv(

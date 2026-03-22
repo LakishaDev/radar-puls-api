@@ -62,7 +62,7 @@ services:
     volumes:
       - ./:/app
       - node_modules:/app/node_modules
-    command: npm run start:dev
+    command: ["sh", "/app/scripts/dev-entrypoint.sh", "npm", "run", "start:dev"]
 
   worker:
     build:
@@ -98,7 +98,8 @@ services:
     volumes:
       - ./:/app
       - node_modules:/app/node_modules
-    command: npm run start:worker:dev
+    command:
+      ["sh", "/app/scripts/dev-entrypoint.sh", "npm", "run", "start:worker:dev"]
 
   enrichment:
     build:
@@ -133,7 +134,8 @@ services:
     volumes:
       - ./:/app
       - node_modules:/app/node_modules
-    command: npm run start:enrichment:dev
+    command:
+      ["sh", "/app/scripts/dev-entrypoint.sh", "npm", "run", "start:enrichment:dev"]
 
 volumes:
   postgres_data:

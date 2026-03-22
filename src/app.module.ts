@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AdminModule } from "./admin/admin.module";
+import { AppConfigModule } from "./app-config/app-config.module";
 import { AuthModule } from "./auth/auth.module";
 import { RequestIdMiddleware } from "./common/request-id.middleware";
 import { validateEnv } from "./config/env.validation";
@@ -12,6 +13,7 @@ import { MapModule } from "./map/map.module";
 import { ProcessingModule } from "./processing/processing.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { StatsModule } from "./stats/stats.module";
+import { WellKnownModule } from "./well-known/well-known.module";
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { StatsModule } from "./stats/stats.module";
     RealtimeModule,
     AdminModule,
     HealthModule,
+    AppConfigModule,
+    WellKnownModule,
     EventsModule,
     MapModule,
     StatsModule,

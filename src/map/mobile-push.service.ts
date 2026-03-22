@@ -128,8 +128,8 @@ export class MobilePushService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const title = this.getTitle(report.eventType);
-    const body = report.locationText ?? report.description ?? "Nova prijava";
+    const title = `${this.getEventTypeLabel(report.eventType)} - Nova prijava u blizini!`;
+    const body = `${this.getEventTypeLabel(report.eventType)} - ${report.locationText ?? "Nepoznata lokacija"}`;
     const batchSize = 500;
 
     for (let i = 0; i < eligibleTokens.length; i += batchSize) {
@@ -143,25 +143,29 @@ export class MobilePushService implements OnModuleInit, OnModuleDestroy {
             body,
           },
           data: {
+            type: "new_report",
             reportId: report.id,
             eventType: report.eventType,
             locationText: report.locationText ?? "",
             lat: report.lat === null ? "" : String(report.lat),
             lng: report.lng === null ? "" : String(report.lng),
+            clickAction: "OPEN_REPORT",
           },
           android: {
             priority: "high",
             notification: {
               channelId: "radar_puls_alerts",
-              sound: `alert_${report.eventType}`,
+              sound: "alert_default",
               priority: "high",
+              clickAction: "OPEN_REPORT",
             },
           },
           apns: {
             payload: {
               aps: {
-                sound: "default",
+                sound: "alert_default.mp3",
                 badge: 1,
+                "content-available": 1,
               },
             },
           },
@@ -178,10 +182,7 @@ export class MobilePushService implements OnModuleInit, OnModuleDestroy {
               code === "messaging/registration-token-not-registered" ||
               code === "messaging/invalid-registration-token"
             ) {
-              await this.tokenRepository.update(
-                { fcmToken: batch[index] },
-                { enabled: false },
-              );
+              await this.tokenRepository.delete({ fcmToken: batch[index] });
             }
           }),
         );
@@ -195,17 +196,17 @@ export class MobilePushService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private getTitle(eventType: string): string {
+  private getEventTypeLabel(eventType: string): string {
     const labels: Record<string, string> = {
       police: "Policija",
       radar: "Radar",
+      checkpoint: "Kontrola",
+      control: "Kontrola",
       accident: "Nesreca",
       traffic_jam: "Guzva",
-      control: "Kontrola",
-      unknown: "Prijava",
+      unknown: "Nepoznato",
     };
-
-    return `Radar Puls: ${labels[eventType] ?? eventType}`;
+    return labels[eventType] ?? "Prijava";
   }
 
   private isInZone(report: MapEventDto, token: MobilePushTokenEntity): boolean {

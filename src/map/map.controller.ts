@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   Post,
   Query,
@@ -49,6 +51,22 @@ export class MapController {
       eventTypes: eventType,
       geoOnly,
     });
+  }
+
+  @Get("/reports/:id")
+  @UseGuards(PublicMapRateLimitGuard)
+  async getPublicMapReportById(@Param("id") id: string): Promise<MapEventDto> {
+    if (!this.isValidUuid(id)) {
+      throw new BadRequestException("Invalid report ID format");
+    }
+
+    const report = await this.eventsService.getPublicReportById(id);
+
+    if (!report) {
+      throw new NotFoundException("Report not found");
+    }
+
+    return report;
   }
 
   @Post("/reports")
@@ -124,5 +142,11 @@ export class MapController {
     @Body() body: UnregisterMobilePushDto,
   ): Promise<{ status: "unregistered" }> {
     return this.mobilePushService.unregisterToken(body.fcmToken);
+  }
+
+  private isValidUuid(value: string): boolean {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(value);
   }
 }

@@ -9,6 +9,7 @@ import request from "supertest";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { GlobalHttpExceptionFilter } from "../src/common/http-exception.filter";
 import { MapPushSubscriptionEntity } from "../src/database/map-push-subscription.entity";
+import { MobilePushTokenEntity } from "../src/database/mobile-push-token.entity";
 import { ParsedEventEntity } from "../src/database/parsed-event.entity";
 import { RawEventEntity } from "../src/database/raw-event.entity";
 import { EventsModule } from "../src/events/events.module";
@@ -35,6 +36,13 @@ describe("Events Map API (e2e)", () => {
     update: jest.fn(),
   };
 
+  const mobilePushTokenRepositoryMock = {
+    upsert: jest.fn(),
+    delete: jest.fn(),
+    find: jest.fn().mockResolvedValue([]),
+    update: jest.fn(),
+  };
+
   const tokenServiceMock = {
     assertAuthorized: jest.fn(),
     assertTokenAuthorized: jest.fn((token: string) => {
@@ -53,6 +61,10 @@ describe("Events Map API (e2e)", () => {
     mapPushSubscriptionsRepositoryMock.delete.mockReset();
     mapPushSubscriptionsRepositoryMock.find.mockResolvedValue([]);
     mapPushSubscriptionsRepositoryMock.update.mockReset();
+    mobilePushTokenRepositoryMock.upsert.mockReset();
+    mobilePushTokenRepositoryMock.delete.mockReset();
+    mobilePushTokenRepositoryMock.find.mockResolvedValue([]);
+    mobilePushTokenRepositoryMock.update.mockReset();
     tokenServiceMock.assertAuthorized.mockClear();
     tokenServiceMock.assertTokenAuthorized.mockClear();
 
@@ -65,6 +77,8 @@ describe("Events Map API (e2e)", () => {
       .useValue(parsedRepositoryMock)
       .overrideProvider(getRepositoryToken(MapPushSubscriptionEntity))
       .useValue(mapPushSubscriptionsRepositoryMock)
+      .overrideProvider(getRepositoryToken(MobilePushTokenEntity))
+      .useValue(mobilePushTokenRepositoryMock)
       .overrideProvider(DeviceTokenService)
       .useValue(tokenServiceMock)
       .compile();
@@ -213,6 +227,60 @@ describe("Events Map API (e2e)", () => {
         downvotes: 0,
       },
     ]);
+  });
+
+  it("returns one public report by id", async () => {
+    parsedRepositoryMock.query.mockResolvedValueOnce([
+      {
+        id: "d067273a-8fd6-4ab5-b24d-3f2f4f54f241",
+        event_type: "police",
+        location_text: "Centar",
+        sender_name: "Pera",
+        description: "Punkt",
+        confidence: "0.72",
+        event_time: "2026-03-13T08:10:00.000Z",
+        created_at: "2026-03-13T08:05:00.000Z",
+        expires_at: "2026-03-13T10:05:00.000Z",
+        latitude: 43.3201,
+        longitude: 21.9002,
+        geo_source: "nominatim",
+        upvotes: 0,
+        downvotes: 0,
+      },
+    ]);
+
+    const response = await request(app.getHttpServer())
+      .get("/api/map/reports/d067273a-8fd6-4ab5-b24d-3f2f4f54f241")
+      .expect(200);
+
+    expect(response.body).toEqual({
+      id: "d067273a-8fd6-4ab5-b24d-3f2f4f54f241",
+      eventType: "police",
+      locationText: "Centar",
+      senderName: "Pera",
+      description: "Punkt",
+      confidence: 0.72,
+      eventTime: "2026-03-13T08:10:00.000Z",
+      createdAt: "2026-03-13T08:05:00.000Z",
+      expiresAt: "2026-03-13T10:05:00.000Z",
+      lat: 43.3201,
+      lng: 21.9002,
+      geoSource: "nominatim",
+      upvotes: 0,
+      downvotes: 0,
+    });
+  });
+
+  it("returns 400 for invalid report id format", async () => {
+    await request(app.getHttpServer()).get("/api/map/reports/not-a-uuid").expect(400);
+  });
+
+  it("returns 404 for unknown report id", async () => {
+    parsedRepositoryMock.query.mockResolvedValueOnce([]);
+
+    await request(app.getHttpServer())
+      .get("/api/map/reports/d067273a-8fd6-4ab5-b24d-3f2f4f54f241")
+      .expect(404);
   });
 
   it("accepts one vote per report and returns updated counters", async () => {

@@ -108,6 +108,80 @@ export class EventsService {
     });
   }
 
+  async getPublicReportById(id: string): Promise<MapEventDto | null> {
+    const rows = (await this.parsedEventsRepository.query(
+      `
+      SELECT
+        pe.id,
+        pe.event_type,
+        pe.location_text,
+        pe.sender_name,
+        pe.description,
+        pe.confidence,
+        pe.event_time,
+        pe.created_at,
+        pe.expires_at,
+        pe.latitude,
+        pe.longitude,
+        pe.geo_source,
+        pe.upvotes,
+        pe.downvotes
+      FROM parsed_events pe
+      WHERE pe.id = $1
+        AND pe.enriched_at IS NOT NULL
+        AND pe.expires_at > NOW()
+        AND pe.moderation_status IN ('auto_approved', 'approved')
+        AND pe.hidden_at IS NULL
+        AND pe.downvotes <= pe.upvotes * 2
+      LIMIT 1
+      `,
+      [id],
+    )) as Array<{
+      id: string;
+      event_type: string;
+      location_text: string | null;
+      sender_name: string | null;
+      description: string | null;
+      confidence: number;
+      event_time: Date | null;
+      created_at: Date;
+      expires_at: Date;
+      latitude: number | null;
+      longitude: number | null;
+      geo_source:
+        | "fallback"
+        | "nominatim"
+        | "cache"
+        | "google"
+        | "google_partial"
+        | null;
+      upvotes: number;
+      downvotes: number;
+    }>;
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const row = rows[0];
+    return {
+      id: row.id,
+      eventType: row.event_type,
+      locationText: row.location_text,
+      senderName: row.sender_name,
+      description: row.description,
+      confidence: Number(row.confidence),
+      eventTime: row.event_time,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      lat: row.latitude,
+      lng: row.longitude,
+      geoSource: row.geo_source,
+      upvotes: Number(row.upvotes),
+      downvotes: Number(row.downvotes),
+    };
+  }
+
   async voteForReport(params: {
     reportId: string;
     vote: "up" | "down";
