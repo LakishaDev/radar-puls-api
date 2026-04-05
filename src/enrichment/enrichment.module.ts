@@ -15,6 +15,6 @@ import { EnrichmentService } from "./enrichment.service";
     GeocodingModule,
   ],
   providers: [EnrichmentService, EnrichmentCacheService, AppLogger],
-  exports: [EnrichmentService],
+  exports: [EnrichmentService, EnrichmentCacheService],
 })
 export class EnrichmentModule {}
