@@ -6,22 +6,31 @@ import { Repository } from "typeorm";
 import { AppLogger } from "../common/app.logger";
 import { ParsedEventEntity } from "../database/parsed-event.entity";
 import { MapEventDto } from "../events/dto/map-event.dto";
-import { GeocodingService, normalizeText } from "../geocoding/geocoding.service";
-import { EventType } from "../parsing/types";
+import {
+  GeocodingService,
+  normalizeText,
+} from "../geocoding/geocoding.service";
+import { EventType, ParseMethod } from "../parsing/types";
 import { RealtimePublisher } from "../realtime/realtime.publisher";
+import { EnrichmentCacheService } from "./enrichment-cache.service";
 
 type PendingEnrichmentRecord = {
   id: string;
   rawEventId: string;
   rawMessage: string;
   enrichAttempts: number;
+  parseMethod: ParseMethod;
+  eventType: EventType;
+  locationText: string | null;
+  confidence: number;
+  senderName: string | null;
 };
 
 type EnrichmentExtraction = {
-  senderName: string | null;
   locationText: string | null;
-  eventType?: EventType;
-  confidence?: number;
+  eventType: EventType;
+  confidence: number;
+  source: "cache" | "keyword" | "ai";
 };
 
 const ALLOWED_EVENT_TYPES: EventType[] = [
@@ -49,15 +58,22 @@ export class EnrichmentService implements OnModuleDestroy {
     @InjectRepository(ParsedEventEntity)
     private readonly parsedEventsRepository: Repository<ParsedEventEntity>,
     private readonly geocodingService: GeocodingService,
+    private readonly enrichmentCacheService: EnrichmentCacheService,
     private readonly configService: ConfigService,
     private readonly logger: AppLogger,
     @Optional() private readonly realtimePublisher?: RealtimePublisher,
   ) {
-    this.pollIntervalMs = this.getPositiveInt("ENRICHMENT_POLL_INTERVAL_MS", 10_000);
+    this.pollIntervalMs = this.getPositiveInt(
+      "ENRICHMENT_POLL_INTERVAL_MS",
+      10_000,
+    );
     this.batchSize = this.getPositiveInt("ENRICHMENT_BATCH_SIZE", 10);
     this.model = this.configService.get<string>("OPENAI_MODEL") ?? "gpt-5-mini";
     this.maxAttempts = this.getPositiveInt("ENRICHMENT_MAX_ATTEMPTS", 3);
-    this.retryBaseMs = this.getPositiveInt("ENRICHMENT_RETRY_COOLDOWN_MS", 60_000);
+    this.retryBaseMs = this.getPositiveInt(
+      "ENRICHMENT_RETRY_COOLDOWN_MS",
+      60_000,
+    );
     this.openai = new OpenAI({
       apiKey: this.configService.getOrThrow<string>("OPENAI_API_KEY"),
     });
@@ -111,7 +127,8 @@ export class EnrichmentService implements OnModuleDestroy {
       }
 
       try {
-        const promotedCount = await this.geocodingService.promoteVerifiedLocations();
+        const promotedCount =
+          await this.geocodingService.promoteVerifiedLocations();
         if (promotedCount > 0) {
           this.logger.info("geocoding_cache_promoted", {
             promoted_count: promotedCount,
@@ -139,7 +156,10 @@ export class EnrichmentService implements OnModuleDestroy {
       };
     } catch (error) {
       this.logger.error("enrichment_batch_failed", {
-        error: error instanceof Error ? error.message : "unknown enrichment batch error",
+        error:
+          error instanceof Error
+            ? error.message
+            : "unknown enrichment batch error",
       });
 
       return {
@@ -156,6 +176,7 @@ export class EnrichmentService implements OnModuleDestroy {
     const rows = (await this.parsedEventsRepository.query(
       `
       SELECT pe.id, pe.raw_event_id, re.raw_message, pe.enrich_attempts
+         , pe.parse_method, pe.event_type, pe.location_text, pe.confidence, pe.sender_name
       FROM parsed_events pe
       INNER JOIN raw_events re ON re.id = pe.raw_event_id
       WHERE pe.enrich_status = 'pending'
@@ -169,6 +190,11 @@ export class EnrichmentService implements OnModuleDestroy {
       raw_event_id: string;
       raw_message: string;
       enrich_attempts: number;
+      parse_method: ParseMethod;
+      event_type: EventType;
+      location_text: string | null;
+      confidence: number;
+      sender_name: string | null;
     }>;
 
     return rows.map((row) => ({
@@ -176,27 +202,82 @@ export class EnrichmentService implements OnModuleDestroy {
       rawEventId: row.raw_event_id,
       rawMessage: row.raw_message,
       enrichAttempts: row.enrich_attempts,
+      parseMethod: row.parse_method,
+      eventType: row.event_type,
+      locationText: row.location_text,
+      confidence: Number(row.confidence),
+      senderName: row.sender_name,
     }));
   }
 
   private async enrichEvent(event: PendingEnrichmentRecord): Promise<boolean> {
     try {
-      const extraction = await this.extractStructuredData(event.rawMessage);
+      const normalizedRawMessage = normalizeText(event.rawMessage);
+      const cached =
+        await this.enrichmentCacheService.findCached(normalizedRawMessage);
+
+      let extraction: EnrichmentExtraction;
+      if (cached) {
+        extraction = {
+          eventType: cached.eventType,
+          locationText: cached.locationText,
+          confidence: cached.confidence,
+          source: "cache",
+        };
+      } else if (
+        event.parseMethod === "keyword" &&
+        event.eventType !== "unknown"
+      ) {
+        extraction = {
+          eventType: event.eventType,
+          locationText: event.locationText,
+          confidence: Number(event.confidence),
+          source: "keyword",
+        };
+      } else {
+        extraction = await this.extractStructuredData(event.rawMessage);
+      }
+
       const geoResult = extraction.locationText
         ? await this.geocodingService.geocodeLocation(extraction.locationText)
         : null;
+
+      if (normalizedRawMessage) {
+        if (extraction.source === "ai") {
+          await this.enrichmentCacheService.upsertFromAI(normalizedRawMessage, {
+            eventType: extraction.eventType,
+            locationText: extraction.locationText,
+            confidence: extraction.confidence,
+          });
+        }
+        if (extraction.source === "keyword") {
+          await this.enrichmentCacheService.upsertFromKeyword(
+            normalizedRawMessage,
+            {
+              eventType: extraction.eventType,
+              locationText: extraction.locationText,
+              confidence: extraction.confidence,
+            },
+          );
+        }
+      }
 
       await this.parsedEventsRepository.query(
         `
         UPDATE parsed_events
         SET
-          sender_name = $2,
+          sender_name = COALESCE($2, sender_name),
           location_text = $3,
-          event_type = COALESCE($4, event_type),
+          event_type = $4,
           latitude = $5,
           longitude = $6,
           geo_source = $7,
-          confidence = COALESCE($8, confidence),
+          confidence = $8,
+          parse_method = CASE
+            WHEN $9 = 'ai' THEN 'ai'
+            WHEN $9 = 'cache' THEN 'cache'
+            ELSE parse_method
+          END,
           enrich_status = 'enriched',
           enriched_at = NOW(),
           updated_at = NOW()
@@ -204,18 +285,22 @@ export class EnrichmentService implements OnModuleDestroy {
         `,
         [
           event.id,
-          extraction.senderName,
+          event.senderName,
           extraction.locationText,
-          extraction.eventType ?? null,
+          extraction.eventType,
           geoResult?.lat ?? null,
           geoResult?.lng ?? null,
           geoResult?.source ?? null,
-          extraction.confidence ?? null,
+          extraction.confidence,
+          extraction.source,
         ],
       );
 
-      const autoVerifyEnabled = this.configService.get<string>("GEO_AUTO_VERIFY_ENABLED") === "true";
-      const minConfidence = Number(this.configService.get("GEO_AUTO_VERIFY_MIN_CONFIDENCE") ?? 90);
+      const autoVerifyEnabled =
+        this.configService.get<string>("GEO_AUTO_VERIFY_ENABLED") === "true";
+      const minConfidence = Number(
+        this.configService.get("GEO_AUTO_VERIFY_MIN_CONFIDENCE") ?? 90,
+      );
 
       if (
         autoVerifyEnabled &&
@@ -239,6 +324,7 @@ export class EnrichmentService implements OnModuleDestroy {
       this.logger.info("enrichment_success", {
         parsed_event_id: event.id,
         raw_event_id: event.rawEventId,
+        enrich_source: extraction.source,
         geo_source: geoResult?.source ?? null,
       });
 
@@ -297,15 +383,19 @@ export class EnrichmentService implements OnModuleDestroy {
         raw_event_id: event.rawEventId,
         attempt: newAttempts,
         exhausted,
-        error: error instanceof Error ? error.message : "unknown enrichment error",
+        error:
+          error instanceof Error ? error.message : "unknown enrichment error",
       });
 
       return false;
     }
   }
 
-  private async extractStructuredData(rawMessage: string): Promise<EnrichmentExtraction> {
-    const supportsTemperature = this.model.startsWith("gpt-4") || this.model.startsWith("gpt-3");
+  private async extractStructuredData(
+    rawMessage: string,
+  ): Promise<EnrichmentExtraction> {
+    const supportsTemperature =
+      this.model.startsWith("gpt-4") || this.model.startsWith("gpt-3");
     const completion = await this.openai.chat.completions.create({
       model: this.model,
       ...(supportsTemperature ? { temperature: 0 } : {}),
@@ -318,18 +408,12 @@ export class EnrichmentService implements OnModuleDestroy {
 Vrati JSON:
 
 {
-  "senderName": string|null,
   "locationText": string|null,
   "eventType": "police"|"accident"|"traffic_jam"|"radar"|"control"|"unknown",
   "confidence": number
 }
 
 PRAVILA
-
-senderName
-- Lično ime samo ako je na početku poruke.
-- Primer: "Marko radar kod delte".
-- Ako nema imena → null.
 
 eventType
 
@@ -384,18 +468,14 @@ Odgovori samo validnim JSON.`,
     }
 
     const parsed = JSON.parse(content) as {
-      senderName?: unknown;
       locationText?: unknown;
       eventType?: unknown;
       confidence?: unknown;
     };
 
-    const senderName =
-      typeof parsed.senderName === "string" && parsed.senderName.trim().length > 0
-        ? parsed.senderName.trim()
-        : null;
     const locationText =
-      typeof parsed.locationText === "string" && parsed.locationText.trim().length > 0
+      typeof parsed.locationText === "string" &&
+      parsed.locationText.trim().length > 0
         ? parsed.locationText.trim()
         : null;
     const eventType =
@@ -416,13 +496,13 @@ Odgovori samo validnim JSON.`,
       : NaN;
     const confidence = Number.isFinite(confidenceNormalized)
       ? Number(Math.min(100, Math.max(0, confidenceNormalized)).toFixed(2))
-      : undefined;
+      : 0;
 
     return {
-      senderName,
       locationText,
-      eventType,
+      eventType: eventType ?? "unknown",
       confidence,
+      source: "ai",
     };
   }
 
@@ -476,7 +556,13 @@ Odgovori samo validnim JSON.`,
       expires_at: Date;
       latitude: number | null;
       longitude: number | null;
-      geo_source: "fallback" | "nominatim" | "cache" | "google" | "google_partial" | null;
+      geo_source:
+        | "fallback"
+        | "nominatim"
+        | "cache"
+        | "google"
+        | "google_partial"
+        | null;
       upvotes: number;
       downvotes: number;
     }>;
@@ -503,5 +589,4 @@ Odgovori samo validnim JSON.`,
       downvotes: Number(row.downvotes),
     };
   }
-
 }

@@ -108,6 +108,56 @@ describe("Viber Events (e2e)", () => {
     expect(repositoryMock.save).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts listener sender and message_time fields", async () => {
+    repositoryMock.save.mockResolvedValueOnce({ id: "1" });
+
+    await request(app.getHttpServer())
+      .post("/api/events/viber")
+      .set("Authorization", "Bearer dev-token-01")
+      .send({
+        ...validPayload,
+        sender_name: "Marko",
+        message_time: "16:42",
+      })
+      .expect(200);
+
+    expect(repositoryMock.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        senderName: "Marko",
+        messageTime: "16:42",
+      }),
+    );
+  });
+
+  it("accepts viber batch payload", async () => {
+    repositoryMock.save.mockResolvedValueOnce([{ id: "1" }, { id: "2" }]);
+
+    const response = await request(app.getHttpServer())
+      .post("/api/events/viber-batch")
+      .set("Authorization", "Bearer dev-token-01")
+      .send({
+        source: "viber_listener_android",
+        group: "Radar Nis",
+        device_id: "android_listener_01",
+        messages: [
+          {
+            sender_name: "Marko",
+            text: "radar kod delte",
+            message_time: "16:42",
+          },
+          { text: "guzva kod stop shopa", message_time: "16:43" },
+        ],
+      })
+      .expect(200);
+
+    expect(response.body).toEqual({
+      status: "accepted",
+      request_id: "req-test-1",
+      accepted: 2,
+    });
+    expect(repositoryMock.save).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 400 for missing required field", async () => {
     const payload = { ...validPayload } as Record<string, string>;
     delete payload.group;

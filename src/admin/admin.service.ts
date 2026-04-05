@@ -11,6 +11,7 @@ import { GeocodingCacheEntity } from "../database/geocoding-cache.entity";
 import { ParsedEventEntity } from "../database/parsed-event.entity";
 import { RawEventEntity } from "../database/raw-event.entity";
 import { normalizeText } from "../geocoding/geocoding.service";
+import { EnrichmentCacheService } from "../enrichment/enrichment-cache.service";
 import { RealtimePublisher } from "../realtime/realtime.publisher";
 import { AdminActivityLogService } from "./admin-activity-log.service";
 import { AdminStatsDto } from "./dto/admin-stats.dto";
@@ -32,6 +33,7 @@ export class AdminService {
     private readonly rawEventsRepository: Repository<RawEventEntity>,
     @InjectRepository(GeocodingCacheEntity)
     private readonly geocodingCacheRepository: Repository<GeocodingCacheEntity>,
+    private readonly enrichmentCacheService: EnrichmentCacheService,
     private readonly logger: AppLogger,
     private readonly activityLog: AdminActivityLogService,
     @Optional() private readonly realtimePublisher?: RealtimePublisher,
@@ -223,7 +225,8 @@ export class AdminService {
 
     const updates: string[] = [];
     const params: unknown[] = [id];
-    const coordinatesTouched = dto.latitude !== undefined || dto.longitude !== undefined;
+    const coordinatesTouched =
+      dto.latitude !== undefined || dto.longitude !== undefined;
 
     if (dto.eventType !== undefined) {
       params.push(dto.eventType);
@@ -290,7 +293,9 @@ export class AdminService {
       `,
       params,
     );
-    const rows = this.extractRows<{ id: string; edit_source: string }>(updateResult);
+    const rows = this.extractRows<{ id: string; edit_source: string }>(
+      updateResult,
+    );
 
     if (rows.length === 0) {
       throw new NotFoundException("Event not found");
@@ -307,6 +312,48 @@ export class AdminService {
       reportId: rows[0].id,
       payload: { id: rows[0].id, edit_source: rows[0].edit_source },
     });
+
+    if (
+      dto.eventType !== undefined ||
+      dto.locationText !== undefined ||
+      dto.confidence !== undefined
+    ) {
+      const rawRows = (await this.parsedEventsRepository.query(
+        `
+        SELECT re.raw_message
+        FROM parsed_events pe
+        INNER JOIN raw_events re ON re.id = pe.raw_event_id
+        WHERE pe.id = $1
+        LIMIT 1
+        `,
+        [id],
+      )) as Array<{ raw_message: string }>;
+
+      const normalized = normalizeText(rawRows[0]?.raw_message ?? "");
+      const eventType = (dto.eventType ??
+        (oldRows[0]?.event_type as string | undefined) ??
+        "unknown") as
+        | "police"
+        | "accident"
+        | "traffic_jam"
+        | "radar"
+        | "control"
+        | "unknown";
+      const locationText =
+        dto.locationText !== undefined
+          ? dto.locationText
+          : ((oldRows[0]?.location_text as string | null | undefined) ?? null);
+      const confidence =
+        dto.confidence !== undefined
+          ? dto.confidence
+          : Number(oldRows[0]?.confidence ?? 0);
+
+      await this.enrichmentCacheService.upsertFromAdmin(normalized, {
+        eventType,
+        locationText,
+        confidence,
+      });
+    }
 
     await this.activityLog.log({
       eventId: id,
@@ -351,8 +398,11 @@ export class AdminService {
       throw new NotFoundException("Event not found");
     }
 
-    const latitude = dto.latitude ?? (event.latitude !== null ? Number(event.latitude) : null);
-    const longitude = dto.longitude ?? (event.longitude !== null ? Number(event.longitude) : null);
+    const latitude =
+      dto.latitude ?? (event.latitude !== null ? Number(event.latitude) : null);
+    const longitude =
+      dto.longitude ??
+      (event.longitude !== null ? Number(event.longitude) : null);
     const locationText = dto.locationText ?? event.location_text;
 
     if (
@@ -423,7 +473,13 @@ export class AdminService {
       WHERE id = $1
       RETURNING id
       `,
-      [id, locationText.trim(), latitude, longitude, dto.confirmedBy ?? "admin"],
+      [
+        id,
+        locationText.trim(),
+        latitude,
+        longitude,
+        dto.confirmedBy ?? "admin",
+      ],
     );
     const updatedRows = this.extractRows<{ id: string }>(confirmResult);
 
@@ -440,7 +496,11 @@ export class AdminService {
     this.realtimePublisher?.publish({
       type: "report_updated",
       reportId: updatedRows[0].id,
-      payload: { id: updatedRows[0].id, geo_source: "admin_confirmed", edit_source: "admin_confirmed" },
+      payload: {
+        id: updatedRows[0].id,
+        geo_source: "admin_confirmed",
+        edit_source: "admin_confirmed",
+      },
     });
 
     await this.activityLog.log({
@@ -476,7 +536,9 @@ export class AdminService {
       `,
       [id, dto.moderatedBy ?? "admin", dto.note ?? null],
     );
-    const rows = this.extractRows<{ id: string; moderation_status: string }>(updateResult);
+    const rows = this.extractRows<{ id: string; moderation_status: string }>(
+      updateResult,
+    );
 
     if ((rows ?? []).length === 0) {
       throw new NotFoundException("Event not found");
@@ -518,7 +580,9 @@ export class AdminService {
       `,
       [id, dto.moderatedBy ?? "admin", dto.note ?? null],
     );
-    const rows = this.extractRows<{ id: string; moderation_status: string }>(updateResult);
+    const rows = this.extractRows<{ id: string; moderation_status: string }>(
+      updateResult,
+    );
 
     if ((rows ?? []).length === 0) {
       throw new NotFoundException("Event not found");
@@ -561,7 +625,9 @@ export class AdminService {
       `,
       [id, dto.moderatedBy ?? "admin", dto.note ?? "Restored by admin"],
     );
-    const rows = this.extractRows<{ id: string; moderation_status: string }>(updateResult);
+    const rows = this.extractRows<{ id: string; moderation_status: string }>(
+      updateResult,
+    );
 
     if (rows.length === 0) {
       throw new NotFoundException("Event not found or not in rejected state");
@@ -650,7 +716,9 @@ export class AdminService {
     };
   }
 
-  async reEnrichEvent(id: string): Promise<{ id: string; enrich_status: string }> {
+  async reEnrichEvent(
+    id: string,
+  ): Promise<{ id: string; enrich_status: string }> {
     const updateResult = await this.parsedEventsRepository.query(
       `
       UPDATE parsed_events
@@ -665,7 +733,9 @@ export class AdminService {
       `,
       [id],
     );
-    const rows = this.extractRows<{ id: string; enrich_status: string }>(updateResult);
+    const rows = this.extractRows<{ id: string; enrich_status: string }>(
+      updateResult,
+    );
 
     if ((rows ?? []).length === 0) {
       throw new NotFoundException("Event not found");
@@ -815,7 +885,9 @@ export class AdminService {
     return this.activityLog.getRecentLogs(limit);
   }
 
-  async reEnrichBatch(dto: AdminBatchReEnrichDto): Promise<{ updated: number }> {
+  async reEnrichBatch(
+    dto: AdminBatchReEnrichDto,
+  ): Promise<{ updated: number }> {
     const params: unknown[] = [];
     const where: string[] = [];
 

@@ -9,9 +9,12 @@ import {
   EventType,
   ParsedEvent,
   ParsingContext,
+  ParseMethod,
   ParsingResult,
   ParseStatus,
 } from "./types";
+import { KeywordParsingService } from "./keyword-parsing.service";
+import { LocationExtractionService } from "./location-extraction.service";
 
 @Injectable()
 export class ParsingService {
@@ -22,6 +25,8 @@ export class ParsingService {
     private readonly parsedEventsRepository: Repository<ParsedEventEntity>,
     private readonly configService: ConfigService,
     private readonly logger: AppLogger,
+    private readonly keywordParsingService: KeywordParsingService,
+    private readonly locationExtractionService: LocationExtractionService,
   ) {
     const envVersion = this.configService.get<string>("PARSER_VERSION");
     if (envVersion) {
@@ -36,18 +41,41 @@ export class ParsingService {
     const parseStatus: ParseStatus = this.isReadableText(context.rawMessage)
       ? "parsed"
       : "no_match";
-    const eventTime = parseStatus === "parsed" ? this.extractTime(context.rawMessage) : null;
-    const enrichStatus: EnrichStatus | null = parseStatus === "parsed" ? "pending" : null;
+    const eventTime =
+      parseStatus === "parsed" ? this.extractTime(context.rawMessage) : null;
+    const enrichStatus: EnrichStatus | null =
+      parseStatus === "parsed" ? "pending" : null;
+
+    let eventType: EventType = "unknown";
+    let locationText: string | null = null;
+    let confidence = 0;
+    let parseMethod: ParseMethod = "rule";
+
+    if (parseStatus === "parsed") {
+      const keywordMatch = this.keywordParsingService.detectEventType(
+        context.rawMessage,
+      );
+      if (keywordMatch) {
+        eventType = keywordMatch.eventType;
+        locationText = this.locationExtractionService.extractLocation(
+          context.rawMessage,
+          keywordMatch.eventType,
+        );
+        confidence = keywordMatch.confidence;
+        parseMethod = "keyword";
+      }
+    }
 
     const result: ParsingResult = {
       status: parseStatus,
-      eventType: "unknown",
-      locationText: null,
-      senderName: null,
+      eventType,
+      locationText,
+      senderName: context.senderName?.trim() ?? null,
       description: null,
       eventTime,
-      confidence: 0,
+      confidence,
       enrichStatus,
+      parseMethod,
     };
 
     this.logger.info("parse_result", {
@@ -57,6 +85,7 @@ export class ParsingService {
       has_location: Boolean(result.locationText),
       has_time: Boolean(eventTime),
       enrich_status: enrichStatus,
+      parse_method: result.parseMethod,
       device_id: context.deviceId,
       source: context.source,
       group_name: context.groupName,
@@ -97,13 +126,22 @@ export class ParsingService {
     }
 
     const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      hour,
+      minute,
+    );
   }
 
   /**
    * Persist parsed result to database with upsert semantics
    */
-  async persistParsed(rawEventId: string, result: ParsingResult): Promise<ParsedEvent> {
+  async persistParsed(
+    rawEventId: string,
+    result: ParsingResult,
+  ): Promise<ParsedEvent> {
     const existing = await this.parsedEventsRepository.findOne({
       where: { rawEventId },
     });
@@ -121,6 +159,7 @@ export class ParsingService {
         eventTime: result.eventTime,
         confidence: result.confidence,
         enrichStatus: result.enrichStatus,
+        parseMethod: result.parseMethod,
         enrichedAt: null,
         parserVersion: this.parserVersion,
         updatedAt: new Date(),
@@ -141,6 +180,7 @@ export class ParsingService {
         eventTime: result.eventTime,
         confidence: result.confidence,
         enrichStatus: result.enrichStatus,
+        parseMethod: result.parseMethod,
         enrichedAt: null,
         parserVersion: this.parserVersion,
       });
@@ -160,6 +200,7 @@ export class ParsingService {
       confidence: entity.confidence,
       enrichStatus: entity.enrichStatus as EnrichStatus | null,
       enrichedAt: entity.enrichedAt,
+      parseMethod: entity.parseMethod as ParseMethod,
       parserVersion: entity.parserVersion,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,

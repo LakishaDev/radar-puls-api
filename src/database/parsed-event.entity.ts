@@ -14,7 +14,10 @@ import { RawEventEntity } from "./raw-event.entity";
 @Index("idx_parsed_events_parse_status", ["parseStatus"])
 @Index("idx_parsed_events_event_type", ["eventType"])
 @Index("idx_parsed_events_created_at", ["createdAt"])
-@Index("idx_parsed_events_enrich_status_created_at", ["enrichStatus", "createdAt"])
+@Index("idx_parsed_events_enrich_status_created_at", [
+  "enrichStatus",
+  "createdAt",
+])
 @Index("idx_parsed_events_moderation_status", ["moderationStatus"])
 @Index("idx_parsed_events_expires_at", ["expiresAt"])
 export class ParsedEventEntity {
@@ -49,6 +52,9 @@ export class ParsedEventEntity {
   @Column({ type: "numeric", name: "confidence", precision: 5, scale: 2 })
   confidence!: number;
 
+  @Column({ type: "text", name: "parse_method", default: "rule" })
+  parseMethod!: "rule" | "keyword" | "ai" | "cache";
+
   @Column({ type: "text", name: "enrich_status", nullable: true })
   enrichStatus!: string | null;
 
@@ -78,8 +84,18 @@ export class ParsedEventEntity {
     | "admin_confirmed"
     | null;
 
-  @Column({ type: "text", name: "edit_source", default: "ai_raw", nullable: true })
-  editSource!: "ai_raw" | "admin_edited" | "admin_confirmed" | "web_submitted" | null;
+  @Column({
+    type: "text",
+    name: "edit_source",
+    default: "ai_raw",
+    nullable: true,
+  })
+  editSource!:
+    | "ai_raw"
+    | "admin_edited"
+    | "admin_confirmed"
+    | "web_submitted"
+    | null;
 
   @Column({
     type: "timestamptz",

@@ -3,23 +3,28 @@
 /**
  * status vrednosti za parsed events
  */
-export type ParseStatus = 'parsed' | 'no_match' | 'partial';
+export type ParseStatus = "parsed" | "no_match" | "partial";
 
 /**
  * status vrednosti za AI enrichment fazu
  */
-export type EnrichStatus = 'pending' | 'enriched' | 'failed';
+export type EnrichStatus = "pending" | "enriched" | "failed";
+
+/**
+ * Kako je parser došao do rezultata
+ */
+export type ParseMethod = "rule" | "keyword" | "ai" | "cache";
 
 /**
  * Dozvoljeni tipovi dogadjaja
  */
 export type EventType =
-  | 'police'
-  | 'accident'
-  | 'traffic_jam'
-  | 'radar'
-  | 'control'
-  | 'unknown';
+  | "police"
+  | "accident"
+  | "traffic_jam"
+  | "radar"
+  | "control"
+  | "unknown";
 
 /**
  * Kontekst koji parser koristi za obradu raw message
@@ -30,6 +35,8 @@ export interface ParsingContext {
   source: string;
   groupName: string;
   deviceId: string;
+  senderName?: string | null;
+  messageTime?: string | null;
 }
 
 /**
@@ -54,6 +61,7 @@ export interface ParsingResult {
   eventTime: Date | null;
   confidence: number;
   enrichStatus: EnrichStatus | null;
+  parseMethod: ParseMethod;
   signals?: ParsingSignals;
 }
 
@@ -72,6 +80,7 @@ export interface ParsedEvent {
   confidence: number;
   enrichStatus: EnrichStatus | null;
   enrichedAt: Date | null;
+  parseMethod: ParseMethod;
   parserVersion: string;
   createdAt?: Date;
   updatedAt?: Date;

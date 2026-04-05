@@ -15,6 +15,7 @@ import { ParsedEventEntity } from "../database/parsed-event.entity";
 import { RawEventEntity } from "../database/raw-event.entity";
 import { EventType } from "../parsing/types";
 import { RealtimePublisher } from "../realtime/realtime.publisher";
+import { CreateViberBatchDto } from "./dto/create-viber-batch.dto";
 import { CreateViberEventDto } from "./dto/create-viber-event.dto";
 import { MapEventDto } from "./dto/map-event.dto";
 
@@ -51,6 +52,8 @@ export class EventsService {
         source: dto.source,
         groupName: dto.group,
         rawMessage: dto.message,
+        senderName: dto.sender_name?.trim() ?? null,
+        messageTime: dto.message_time?.trim() ?? null,
         eventTimestamp: new Date(dto.timestamp),
         receivedAt: new Date(),
         deviceId: dto.device_id,
@@ -71,6 +74,68 @@ export class EventsService {
       };
     } catch (error) {
       this.logger.error("event_store_failed", {
+        request_id: requestId,
+        reason: error instanceof Error ? error.message : "unknown",
+      });
+      throw new InternalServerErrorException();
+    }
+  }
+
+  async ingestViberBatch(
+    dto: CreateViberBatchDto,
+    authToken: string,
+    requestId: string,
+  ): Promise<{ status: string; request_id: string; accepted: number }> {
+    this.deviceTokenService.assertAuthorized(dto.device_id, authToken);
+
+    const now = new Date();
+    const defaultTimestamp = dto.timestamp ? new Date(dto.timestamp) : now;
+    const entities = dto.messages
+      .filter(
+        (message) =>
+          typeof message.text === "string" && message.text.trim().length > 0,
+      )
+      .map((message) =>
+        this.rawEventsRepository.create({
+          source: dto.source,
+          groupName: dto.group,
+          rawMessage: message.text,
+          senderName: message.sender_name?.trim() ?? null,
+          messageTime: message.message_time?.trim() ?? null,
+          eventTimestamp: message.timestamp
+            ? new Date(message.timestamp)
+            : defaultTimestamp,
+          receivedAt: now,
+          deviceId: dto.device_id,
+          processingStatus: "pending",
+        }),
+      );
+
+    if (entities.length === 0) {
+      return {
+        status: "accepted",
+        request_id: requestId,
+        accepted: 0,
+      };
+    }
+
+    try {
+      await this.rawEventsRepository.save(entities);
+
+      this.logger.info("event_batch_stored", {
+        request_id: requestId,
+        device_id: dto.device_id,
+        source: dto.source,
+        accepted: entities.length,
+      });
+
+      return {
+        status: "accepted",
+        request_id: requestId,
+        accepted: entities.length,
+      };
+    } catch (error) {
+      this.logger.error("event_batch_store_failed", {
         request_id: requestId,
         reason: error instanceof Error ? error.message : "unknown",
       });
@@ -204,7 +269,9 @@ export class EventsService {
       throw new NotFoundException("Report unavailable");
     }
 
-    const voterHash = createHash("sha256").update(params.clientId).digest("hex");
+    const voterHash = createHash("sha256")
+      .update(params.clientId)
+      .digest("hex");
     const voteInsertRows = (await this.parsedEventsRepository.query(
       `
       INSERT INTO map_report_votes (parsed_event_id, voter_hash, vote)
@@ -268,8 +335,15 @@ export class EventsService {
     clientId: string;
   }): Promise<{ id: string; moderationStatus: string }> {
     const now = new Date();
-    const deviceHash = createHash("sha256").update(params.clientId).digest("hex").slice(0, 16);
-    const rawMessage = [params.eventType, params.locationText, params.description]
+    const deviceHash = createHash("sha256")
+      .update(params.clientId)
+      .digest("hex")
+      .slice(0, 16);
+    const rawMessage = [
+      params.eventType,
+      params.locationText,
+      params.description,
+    ]
       .filter((chunk) => typeof chunk === "string" && chunk.length > 0)
       .join(" | ");
 
@@ -337,7 +411,9 @@ export class EventsService {
         75,
         params.lat ?? null,
         params.lng ?? null,
-        params.lat !== undefined && params.lng !== undefined ? "fallback" : null,
+        params.lat !== undefined && params.lng !== undefined
+          ? "fallback"
+          : null,
       ],
     )) as Array<{ id: string; moderation_status: string }>;
 

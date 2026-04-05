@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { EnrichmentService } from "../src/enrichment/enrichment.service";
+import { EnrichmentCacheService } from "../src/enrichment/enrichment-cache.service";
 import { GeocodingService } from "../src/geocoding/geocoding.service";
 import { ParsedEventEntity } from "../src/database/parsed-event.entity";
 import { AppLogger } from "../src/common/app.logger";
@@ -28,6 +29,13 @@ describe("EnrichmentService (e2e)", () => {
 
   const geocodingServiceMock = {
     geocodeLocation: jest.fn(),
+    promoteVerifiedLocations: jest.fn().mockResolvedValue(0),
+  };
+
+  const enrichmentCacheServiceMock = {
+    findCached: jest.fn(),
+    upsertFromAI: jest.fn(),
+    upsertFromKeyword: jest.fn(),
   };
 
   const configServiceMock = {
@@ -56,6 +64,12 @@ describe("EnrichmentService (e2e)", () => {
     loggerMock.error.mockClear();
     geocodingServiceMock.geocodeLocation.mockReset();
     geocodingServiceMock.geocodeLocation.mockResolvedValue(null);
+    geocodingServiceMock.promoteVerifiedLocations.mockReset();
+    geocodingServiceMock.promoteVerifiedLocations.mockResolvedValue(0);
+    enrichmentCacheServiceMock.findCached.mockReset();
+    enrichmentCacheServiceMock.upsertFromAI.mockReset();
+    enrichmentCacheServiceMock.upsertFromKeyword.mockReset();
+    enrichmentCacheServiceMock.findCached.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -76,6 +90,10 @@ describe("EnrichmentService (e2e)", () => {
           provide: GeocodingService,
           useValue: geocodingServiceMock,
         },
+        {
+          provide: EnrichmentCacheService,
+          useValue: enrichmentCacheServiceMock,
+        },
       ],
     }).compile();
 
@@ -93,6 +111,11 @@ describe("EnrichmentService (e2e)", () => {
           raw_event_id: "raw-1",
           raw_message: "Marko Bulevar Nemanjica 09:12",
           enrich_attempts: 0,
+          parse_method: "rule",
+          event_type: "unknown",
+          location_text: null,
+          confidence: 0,
+          sender_name: null,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
@@ -100,10 +123,10 @@ describe("EnrichmentService (e2e)", () => {
     jest
       .spyOn(enrichmentService as any, "extractStructuredData")
       .mockResolvedValue({
-        senderName: "Marko",
         locationText: "Bulevar Nemanjica",
         eventType: "radar",
         confidence: 91,
+        source: "ai",
       });
     geocodingServiceMock.geocodeLocation.mockResolvedValueOnce({
       lat: 43.3237,
@@ -118,16 +141,18 @@ describe("EnrichmentService (e2e)", () => {
     expect(result.failedCount).toBe(0);
 
     expect(parsedEventsRepository.query).toHaveBeenCalledTimes(2);
-    const updateCall = (parsedEventsRepository.query as jest.Mock).mock.calls[1];
+    const updateCall = (parsedEventsRepository.query as jest.Mock).mock
+      .calls[1];
     expect(updateCall[1]).toEqual([
       "parsed-1",
-      "Marko",
+      null,
       "Bulevar Nemanjica",
       "radar",
       43.3237,
       21.896,
       "fallback",
       91,
+      "ai",
     ]);
   });
 
@@ -141,6 +166,11 @@ describe("EnrichmentService (e2e)", () => {
           raw_event_id: "r-1",
           raw_message: "neka poruka",
           enrich_attempts: 0,
+          parse_method: "rule",
+          event_type: "unknown",
+          location_text: null,
+          confidence: 0,
+          sender_name: null,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
@@ -153,7 +183,8 @@ describe("EnrichmentService (e2e)", () => {
 
     expect(result.failedCount).toBe(1);
 
-    const updateCall = (parsedEventsRepository.query as jest.Mock).mock.calls[1];
+    const updateCall = (parsedEventsRepository.query as jest.Mock).mock
+      .calls[1];
     const params = updateCall[1] as [string, number, Date];
 
     expect(params[0]).toBe("p-1");
@@ -170,6 +201,11 @@ describe("EnrichmentService (e2e)", () => {
           raw_event_id: "raw-3",
           raw_message: "Petar kod Delte",
           enrich_attempts: 0,
+          parse_method: "rule",
+          event_type: "control",
+          location_text: null,
+          confidence: 40,
+          sender_name: null,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
@@ -177,23 +213,27 @@ describe("EnrichmentService (e2e)", () => {
     jest
       .spyOn(enrichmentService as any, "extractStructuredData")
       .mockResolvedValue({
-        senderName: "Petar",
         locationText: "Delta",
+        eventType: "unknown",
+        confidence: 65,
+        source: "ai",
       });
     geocodingServiceMock.geocodeLocation.mockResolvedValueOnce(null);
 
     await enrichmentService.pollAndEnrich(10);
 
-    const updateCall = (parsedEventsRepository.query as jest.Mock).mock.calls[1];
+    const updateCall = (parsedEventsRepository.query as jest.Mock).mock
+      .calls[1];
     expect(updateCall[1]).toEqual([
       "parsed-3",
-      "Petar",
+      null,
       "Delta",
+      "unknown",
       null,
       null,
       null,
-      null,
-      null,
+      65,
+      "ai",
     ]);
   });
 
@@ -205,6 +245,11 @@ describe("EnrichmentService (e2e)", () => {
           raw_event_id: "r-2",
           raw_message: "neka poruka",
           enrich_attempts: 1,
+          parse_method: "rule",
+          event_type: "unknown",
+          location_text: null,
+          confidence: 0,
+          sender_name: null,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
@@ -216,11 +261,8 @@ describe("EnrichmentService (e2e)", () => {
     const before = Date.now();
     await enrichmentService.pollAndEnrich(10);
 
-    const params = (parsedEventsRepository.query as jest.Mock).mock.calls[1][1] as [
-      string,
-      number,
-      Date,
-    ];
+    const params = (parsedEventsRepository.query as jest.Mock).mock
+      .calls[1][1] as [string, number, Date];
     expect(params[1]).toBe(2);
     expect(params[2].getTime()).toBeGreaterThanOrEqual(before + 100_000);
   });
@@ -233,6 +275,11 @@ describe("EnrichmentService (e2e)", () => {
           raw_event_id: "r-3",
           raw_message: "neka poruka",
           enrich_attempts: 2,
+          parse_method: "rule",
+          event_type: "unknown",
+          location_text: null,
+          confidence: 0,
+          sender_name: null,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
@@ -243,8 +290,10 @@ describe("EnrichmentService (e2e)", () => {
 
     await enrichmentService.pollAndEnrich(10);
 
-    const updateSql = (parsedEventsRepository.query as jest.Mock).mock.calls[1][0] as string;
-    const params = (parsedEventsRepository.query as jest.Mock).mock.calls[1][1] as unknown[];
+    const updateSql = (parsedEventsRepository.query as jest.Mock).mock
+      .calls[1][0] as string;
+    const params = (parsedEventsRepository.query as jest.Mock).mock
+      .calls[1][1] as unknown[];
 
     expect(updateSql).toContain("enrich_status = 'failed'");
     expect(params[0]).toBe("p-3");
@@ -260,6 +309,11 @@ describe("EnrichmentService (e2e)", () => {
           raw_event_id: "r-4",
           raw_message: "Petar bulevar",
           enrich_attempts: 1,
+          parse_method: "rule",
+          event_type: "unknown",
+          location_text: null,
+          confidence: 0,
+          sender_name: null,
         },
       ])
       .mockResolvedValueOnce([[], 1]);
@@ -267,9 +321,10 @@ describe("EnrichmentService (e2e)", () => {
     jest
       .spyOn(enrichmentService as any, "extractStructuredData")
       .mockResolvedValue({
-        senderName: "Petar",
         locationText: "Bulevar Nemanjica",
         eventType: "radar",
+        confidence: 87,
+        source: "ai",
       });
     geocodingServiceMock.geocodeLocation.mockResolvedValueOnce(null);
 
@@ -284,7 +339,43 @@ describe("EnrichmentService (e2e)", () => {
 
     await enrichmentService.pollAndEnrich(10);
 
-    const sql = (parsedEventsRepository.query as jest.Mock).mock.calls[0][0] as string;
+    const sql = (parsedEventsRepository.query as jest.Mock).mock
+      .calls[0][0] as string;
     expect(sql).toContain("enrich_next_retry_at");
+  });
+
+  it("uses cache result and skips AI extraction", async () => {
+    (parsedEventsRepository.query as jest.Mock)
+      .mockResolvedValueOnce([
+        {
+          id: "parsed-5",
+          raw_event_id: "raw-5",
+          raw_message: "radar kod delte",
+          enrich_attempts: 0,
+          parse_method: "rule",
+          event_type: "unknown",
+          location_text: null,
+          confidence: 0,
+          sender_name: "Marko",
+        },
+      ])
+      .mockResolvedValueOnce([[], 1]);
+
+    enrichmentCacheServiceMock.findCached.mockResolvedValueOnce({
+      eventType: "radar",
+      locationText: "delte",
+      confidence: 90,
+    });
+
+    const extractSpy = jest.spyOn(
+      enrichmentService as any,
+      "extractStructuredData",
+    );
+    await enrichmentService.pollAndEnrich(10);
+
+    expect(extractSpy).not.toHaveBeenCalled();
+    const updateCall = (parsedEventsRepository.query as jest.Mock).mock
+      .calls[1];
+    expect(updateCall[1][8]).toBe("cache");
   });
 });

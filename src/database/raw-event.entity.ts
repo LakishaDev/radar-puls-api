@@ -28,6 +28,12 @@ export class RawEventEntity {
   @Column({ type: "text", name: "raw_message" })
   rawMessage!: string;
 
+  @Column({ type: "text", name: "sender_name", nullable: true })
+  senderName!: string | null;
+
+  @Column({ type: "text", name: "message_time", nullable: true })
+  messageTime!: string | null;
+
   @Column({ type: "timestamptz", name: "event_timestamp" })
   eventTimestamp!: Date;
 
@@ -49,7 +55,11 @@ export class RawEventEntity {
   @Column({ type: "timestamptz", name: "next_retry_at", nullable: true })
   nextRetryAt!: Date | null;
 
-  @Column({ type: "timestamptz", name: "processing_started_at", nullable: true })
+  @Column({
+    type: "timestamptz",
+    name: "processing_started_at",
+    nullable: true,
+  })
   processingStartedAt!: Date | null;
 
   @Column({ type: "timestamptz", name: "processed_at", nullable: true })

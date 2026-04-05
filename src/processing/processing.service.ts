@@ -19,6 +19,8 @@ type BatchResult = {
 type ClaimedEvent = {
   id: string;
   rawMessage: string;
+  senderName: string | null;
+  messageTime: string | null;
   source: string;
   groupName: string;
   receivedAt: Date;
@@ -51,7 +53,10 @@ export class ProcessingService implements OnModuleDestroy {
   ) {
     this.batchSize = this.getPositiveInt("WORKER_BATCH_SIZE", 100);
     this.pollIntervalMs = this.getPositiveInt("WORKER_POLL_INTERVAL_MS", 5000);
-    this.leaseTimeoutMs = this.getPositiveInt("WORKER_LEASE_TIMEOUT_MS", 5 * 60_000);
+    this.leaseTimeoutMs = this.getPositiveInt(
+      "WORKER_LEASE_TIMEOUT_MS",
+      5 * 60_000,
+    );
     this.maxRetries = this.getPositiveInt("WORKER_MAX_RETRIES", 3);
     this.instanceId =
       this.configService.get<string>("WORKER_INSTANCE_ID") ??
@@ -186,16 +191,30 @@ export class ProcessingService implements OnModuleDestroy {
         last_error = NULL
       FROM candidates
       WHERE re.id = candidates.id
-      RETURNING re.id, re.raw_message, re.source, re.group_name, re.received_at, re.device_id;
+      RETURNING re.id, re.raw_message, re.sender_name, re.message_time, re.source, re.group_name, re.received_at, re.device_id;
       `,
       [this.batchSize, this.leaseTimeoutMs, this.instanceId],
-    )) as [Array<{ id?: string; raw_message?: string; source?: string; group_name?: string; received_at?: Date; device_id?: string }>, number];
+    )) as [
+      Array<{
+        id?: string;
+        raw_message?: string;
+        sender_name?: string | null;
+        message_time?: string | null;
+        source?: string;
+        group_name?: string;
+        received_at?: Date;
+        device_id?: string;
+      }>,
+      number,
+    ];
 
     return (rows ?? [])
       .filter((row) => typeof row.id === "string" && row.id.length > 0)
       .map((row) => ({
         id: row.id as string,
         rawMessage: row.raw_message ?? "",
+        senderName: row.sender_name ?? null,
+        messageTime: row.message_time ?? null,
         source: row.source ?? "",
         groupName: row.group_name ?? "",
         receivedAt: row.received_at ?? new Date(),
@@ -215,6 +234,8 @@ export class ProcessingService implements OnModuleDestroy {
       source: event.source,
       groupName: event.groupName,
       deviceId: event.deviceId,
+      senderName: event.senderName,
+      messageTime: event.messageTime,
     });
 
     // Persist parsed result
@@ -257,7 +278,11 @@ export class ProcessingService implements OnModuleDestroy {
   private async markRetryOrFailed(
     eventId: string,
     errorMessage: string,
-  ): Promise<{ logEvent: "process_retry" | "process_failed"; retryCount: number; nextRetryAt: Date | null }> {
+  ): Promise<{
+    logEvent: "process_retry" | "process_failed";
+    retryCount: number;
+    nextRetryAt: Date | null;
+  }> {
     const row = (await this.rawEventsRepository.query(
       `
       SELECT retry_count

@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { DeviceAuthGuard } from "../auth/device-auth.guard";
 import { RequestWithContext } from "../common/types";
+import { CreateViberBatchDto } from "./dto/create-viber-batch.dto";
 import { CreateViberEventDto } from "./dto/create-viber-event.dto";
 import { MapEventDto } from "./dto/map-event.dto";
 import { EventsService } from "./events.service";
@@ -34,6 +35,20 @@ export class EventsController {
     }
 
     return this.eventsService.ingestViberEvent(
+      body,
+      req.authToken ?? "",
+      req.requestId ?? "unknown",
+    );
+  }
+
+  @Post("/viber-batch")
+  @HttpCode(200)
+  @UseGuards(DeviceAuthGuard)
+  async createViberBatch(
+    @Body() body: CreateViberBatchDto,
+    @Req() req: RequestWithContext,
+  ): Promise<{ status: string; request_id: string; accepted: number }> {
+    return this.eventsService.ingestViberBatch(
       body,
       req.authToken ?? "",
       req.requestId ?? "unknown",

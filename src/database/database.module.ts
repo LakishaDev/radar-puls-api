@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AdminActivityLogEntity } from "./admin-activity-log.entity";
+import { EnrichmentCacheEntity } from "./enrichment-cache.entity";
 import { GeocodingCacheEntity } from "./geocoding-cache.entity";
 import { LocationAliasEntity } from "./location-alias.entity";
 import { MapPushSubscriptionEntity } from "./map-push-subscription.entity";
@@ -23,6 +24,7 @@ import { ParsedEventEntity } from "./parsed-event.entity";
           MapPushSubscriptionEntity,
           MobilePushTokenEntity,
           GeocodingCacheEntity,
+          EnrichmentCacheEntity,
           AdminActivityLogEntity,
           LocationAliasEntity,
         ],
@@ -36,6 +38,7 @@ import { ParsedEventEntity } from "./parsed-event.entity";
       MapPushSubscriptionEntity,
       MobilePushTokenEntity,
       GeocodingCacheEntity,
+      EnrichmentCacheEntity,
       AdminActivityLogEntity,
       LocationAliasEntity,
     ]),

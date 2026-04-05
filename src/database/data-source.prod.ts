@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { AdminActivityLogEntity } from "./admin-activity-log.entity";
+import { EnrichmentCacheEntity } from "./enrichment-cache.entity";
 import { GeocodingCacheEntity } from "./geocoding-cache.entity";
 import { LocationAliasEntity } from "./location-alias.entity";
 import { RawEventEntity } from "./raw-event.entity";
@@ -17,6 +18,7 @@ export const AppDataSource = new DataSource({
     MapPushSubscriptionEntity,
     MobilePushTokenEntity,
     GeocodingCacheEntity,
+    EnrichmentCacheEntity,
     AdminActivityLogEntity,
     LocationAliasEntity,
   ],

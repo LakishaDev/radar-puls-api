@@ -3,6 +3,8 @@ import { ConfigService } from "@nestjs/config";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { AppLogger } from "../src/common/app.logger";
 import { ParsedEventEntity } from "../src/database/parsed-event.entity";
+import { KeywordParsingService } from "../src/parsing/keyword-parsing.service";
+import { LocationExtractionService } from "../src/parsing/location-extraction.service";
 import { ParsingService } from "../src/parsing/parsing.service";
 import { ParsingContext, ParsingResult } from "../src/parsing/types";
 
@@ -31,6 +33,14 @@ describe("ParsingService", () => {
     error: jest.fn(),
   };
 
+  const keywordParsingServiceMock = {
+    detectEventType: jest.fn(),
+  };
+
+  const locationExtractionServiceMock = {
+    extractLocation: jest.fn(),
+  };
+
   beforeEach(async () => {
     parsedEventsRepositoryMock.findOne.mockReset();
     parsedEventsRepositoryMock.create.mockReset();
@@ -38,6 +48,10 @@ describe("ParsingService", () => {
     parsedEventsRepositoryMock.update.mockReset();
     configServiceMock.get.mockClear();
     loggerMock.info.mockClear();
+    keywordParsingServiceMock.detectEventType.mockReset();
+    locationExtractionServiceMock.extractLocation.mockReset();
+    keywordParsingServiceMock.detectEventType.mockReturnValue(null);
+    locationExtractionServiceMock.extractLocation.mockReturnValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,6 +67,14 @@ describe("ParsingService", () => {
         {
           provide: AppLogger,
           useValue: loggerMock,
+        },
+        {
+          provide: KeywordParsingService,
+          useValue: keywordParsingServiceMock,
+        },
+        {
+          provide: LocationExtractionService,
+          useValue: locationExtractionServiceMock,
         },
       ],
     }).compile();
@@ -77,6 +99,7 @@ describe("ParsingService", () => {
       expect(result.locationText).toBeNull();
       expect(result.senderName).toBeNull();
       expect(result.enrichStatus).toBe("pending");
+      expect(result.parseMethod).toBe("rule");
       expect(result.confidence).toBe(0);
     });
 
@@ -94,6 +117,7 @@ describe("ParsingService", () => {
       expect(result.status).toBe("no_match");
       expect(result.enrichStatus).toBeNull();
       expect(result.eventTime).toBeNull();
+      expect(result.parseMethod).toBe("rule");
     });
 
     it("returns no_match for noisy text with low letter ratio", async () => {
@@ -110,6 +134,7 @@ describe("ParsingService", () => {
       expect(result.status).toBe("no_match");
       expect(result.enrichStatus).toBeNull();
       expect(result.eventType).toBe("unknown");
+      expect(result.parseMethod).toBe("rule");
     });
 
     it("extracts HH:MM time with leading zero", async () => {
@@ -155,6 +180,29 @@ describe("ParsingService", () => {
       expect(result.eventTime).toBeNull();
       expect(result.enrichStatus).toBe("pending");
     });
+
+    it("uses keyword parser and location extractor when keyword is matched", async () => {
+      keywordParsingServiceMock.detectEventType.mockReturnValueOnce({
+        eventType: "radar",
+        confidence: 85,
+      });
+      locationExtractionServiceMock.extractLocation.mockReturnValueOnce(
+        "delte",
+      );
+
+      const result = await service.parseRawMessage({
+        rawMessage: "radar kod delte",
+        receivedAt: new Date(),
+        source: "viber_listener_android",
+        groupName: "Radar Nis",
+        deviceId: "android_listener_01",
+      });
+
+      expect(result.eventType).toBe("radar");
+      expect(result.locationText).toBe("delte");
+      expect(result.confidence).toBe(85);
+      expect(result.parseMethod).toBe("keyword");
+    });
   });
 
   describe("persistParsed", () => {
@@ -168,6 +216,7 @@ describe("ParsingService", () => {
         eventTime: null,
         confidence: 0,
         enrichStatus: "pending",
+        parseMethod: "rule",
       };
 
       const mockEntity = {
@@ -180,6 +229,7 @@ describe("ParsingService", () => {
         description: null,
         eventTime: null,
         confidence: 0,
+        parseMethod: "rule",
         enrichStatus: "pending",
         enrichedAt: null,
         parserVersion: "v1.0",
@@ -212,6 +262,7 @@ describe("ParsingService", () => {
         eventTime: null,
         confidence: 0,
         enrichStatus: "pending",
+        parseMethod: "rule",
       };
 
       const existingEntity = {
@@ -230,6 +281,7 @@ describe("ParsingService", () => {
         description: null,
         eventTime: null,
         confidence: 0,
+        parseMethod: "rule",
         enrichStatus: "pending",
         enrichedAt: null,
         parserVersion: "v1.0",

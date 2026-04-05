@@ -1,4 +1,10 @@
-import { IsISO8601, IsNotEmpty, IsString } from "class-validator";
+import {
+  IsISO8601,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+} from "class-validator";
 
 export class CreateViberEventDto {
   @IsString()
@@ -12,6 +18,16 @@ export class CreateViberEventDto {
   @IsString()
   @IsNotEmpty()
   message!: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sender_name?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{1,2}:\d{2}$/)
+  message_time?: string;
 
   @IsString()
   @IsNotEmpty()
