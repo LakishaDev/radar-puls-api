@@ -344,7 +344,7 @@ export class AdminService {
           ? dto.locationText
           : ((oldRows[0]?.location_text as string | null | undefined) ?? null);
       const confidence =
-        dto.confidence !== undefined
+        dto.confidence != null
           ? dto.confidence
           : Number(oldRows[0]?.confidence ?? 0);
 
