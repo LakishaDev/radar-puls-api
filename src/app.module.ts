@@ -10,8 +10,10 @@ import { EnrichmentModule } from "./enrichment/enrichment.module";
 import { EventsModule } from "./events/events.module";
 import { HealthModule } from "./health/health.module";
 import { MapModule } from "./map/map.module";
+import { MobileUsersModule } from "./mobile-users/mobile-users.module";
 import { ProcessingModule } from "./processing/processing.module";
 import { RealtimeModule } from "./realtime/realtime.module";
+import { ReferralsModule } from "./referrals/referrals.module";
 import { StatsModule } from "./stats/stats.module";
 import { WellKnownModule } from "./well-known/well-known.module";
 
@@ -33,6 +35,8 @@ import { WellKnownModule } from "./well-known/well-known.module";
     StatsModule,
     ProcessingModule,
     EnrichmentModule,
+    MobileUsersModule,
+    ReferralsModule,
   ],
 })
 export class AppModule implements NestModule {
