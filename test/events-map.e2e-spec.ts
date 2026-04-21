@@ -16,6 +16,9 @@ import { EventsModule } from "../src/events/events.module";
 import { MapModule } from "../src/map/map.module";
 import { StatsModule } from "../src/stats/stats.module";
 import { DeviceTokenService } from "../src/auth/device-token.service";
+import { MobileUserEntity } from "../src/mobile-users/mobile-user.entity";
+import { ReferralEntity } from "../src/referrals/referral.entity";
+import { ReferralCodeEntity } from "../src/referrals/referral-code.entity";
 
 describe("Events Map API (e2e)", () => {
   let app: INestApplication;
@@ -79,6 +82,12 @@ describe("Events Map API (e2e)", () => {
       .useValue(mapPushSubscriptionsRepositoryMock)
       .overrideProvider(getRepositoryToken(MobilePushTokenEntity))
       .useValue(mobilePushTokenRepositoryMock)
+      .overrideProvider(getRepositoryToken(MobileUserEntity))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(ReferralEntity))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(ReferralCodeEntity))
+      .useValue({})
       .overrideProvider(DeviceTokenService)
       .useValue(tokenServiceMock)
       .compile();
