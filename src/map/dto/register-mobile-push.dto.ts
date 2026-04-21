@@ -44,6 +44,11 @@ export class RegisterMobilePushDto {
   @IsString()
   @MaxLength(20)
   appVersion?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  referralCode?: string;
 }
 
 export class UnregisterMobilePushDto {

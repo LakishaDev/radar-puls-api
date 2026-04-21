@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MobileUsersModule } from '../mobile-users/mobile-users.module';
 import { CodeGeneratorService } from './code-generator.service';
@@ -11,7 +11,7 @@ import { ReferralsService } from './referrals.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([ReferralEntity, ReferralCodeEntity]),
-    MobileUsersModule,
+    forwardRef(() => MobileUsersModule),
   ],
   controllers: [ReferralsController],
   providers: [ReferralsService, CodeGeneratorService, FraudCheckService],

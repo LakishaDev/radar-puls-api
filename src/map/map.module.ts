@@ -5,6 +5,8 @@ import { AppLogger } from "../common/app.logger";
 import { MobilePushTokenEntity } from "../database/mobile-push-token.entity";
 import { MapPushSubscriptionEntity } from "../database/map-push-subscription.entity";
 import { EventsModule } from "../events/events.module";
+import { MobileUsersModule } from "../mobile-users/mobile-users.module";
+import { ReferralsModule } from "../referrals/referrals.module";
 import { MapController } from "./map.controller";
 import { MobilePushService } from "./mobile-push.service";
 import { PublicCaptchaService } from "./public-captcha.service";
@@ -16,6 +18,8 @@ import { PushNotificationsService } from "./push-notifications.service";
   imports: [
     ConfigModule,
     EventsModule,
+    MobileUsersModule,
+    ReferralsModule,
     TypeOrmModule.forFeature([MapPushSubscriptionEntity, MobilePushTokenEntity]),
   ],
   controllers: [MapController],

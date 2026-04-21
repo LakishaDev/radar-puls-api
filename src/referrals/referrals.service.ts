@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -35,6 +37,7 @@ export class ReferralsService {
     private readonly repo: Repository<ReferralEntity>,
     private readonly codeGenerator: CodeGeneratorService,
     private readonly fraudCheck: FraudCheckService,
+    @Inject(forwardRef(() => MobileUsersService))
     private readonly mobileUsers: MobileUsersService,
   ) {}
 

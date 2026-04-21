@@ -4,6 +4,8 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
+  Ip,
   NotFoundException,
   Param,
   Post,
@@ -24,6 +26,8 @@ import {
   UnsubscribeMapAlertsDto,
 } from "./dto/subscribe-map-alerts.dto";
 import { MobilePushService } from "./mobile-push.service";
+import { MobileUsersService } from "../mobile-users/mobile-users.service";
+import { ReferralsService } from "../referrals/referrals.service";
 import { VoteReportDto } from "./dto/vote-report.dto";
 import { PublicCaptchaService } from "./public-captcha.service";
 import { PublicMapRateLimitGuard } from "./public-map-rate-limit.guard";
@@ -37,6 +41,8 @@ export class MapController {
     private readonly captchaService: PublicCaptchaService,
     private readonly pushNotificationsService: PushNotificationsService,
     private readonly mobilePushService: MobilePushService,
+    private readonly mobileUsersService: MobileUsersService,
+    private readonly referralsService: ReferralsService,
   ) {}
 
   @Get("/reports")
@@ -132,8 +138,36 @@ export class MapController {
   @UseGuards(PublicMapRateLimitGuard)
   async registerMobileDevice(
     @Body() body: RegisterMobilePushDto,
+    @Ip() ip: string,
+    @Headers("x-forwarded-for") forwardedFor?: string,
   ): Promise<{ status: "registered" }> {
-    return this.mobilePushService.registerToken(body);
+    const clientIp = forwardedFor?.split(",")[0]?.trim() ?? ip;
+    await Promise.all([
+      this.mobilePushService.registerToken(body),
+      this.mobileUsersService.upsertDevice(
+        {
+          deviceUuid: body.deviceId,
+          platform: body.platform,
+          appVersion: body.appVersion,
+          fcmToken: body.fcmToken,
+        },
+        clientIp,
+      ),
+    ]);
+
+    if (body.referralCode) {
+      try {
+        await this.referralsService.attach({
+          deviceUuid: body.deviceId,
+          code: body.referralCode,
+          ip: clientIp,
+        });
+      } catch {
+        // referral attachment is best-effort; don't fail registration
+      }
+    }
+
+    return { status: "registered" };
   }
 
   @Delete("/mobile/register-device")
